@@ -470,6 +470,37 @@
 
   footer { text-align: center; color: var(--muted); font-size: 12px; padding: 32px 20px; }
 
+  /* Bookings-per-day chart */
+  .chart-card .chart-toolbar { display:flex; gap:6px; align-items:center; }
+  .chart-toolbar button {
+    background: transparent; border: 1px solid var(--border);
+    padding: 6px 10px; border-radius: 8px; font-size: 11px; font-weight: 600;
+    color: var(--text-2); cursor: pointer; margin: 0; width: auto;
+    font-family: inherit;
+  }
+  .chart-toolbar button:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-strong); }
+  .chart-toolbar button.active { background: var(--brand-soft); color: var(--brand); border-color: color-mix(in srgb, var(--brand) 30%, transparent); }
+  .chart-canvas {
+    position: relative; width: 100%; overflow-x: auto;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface-2); padding: 14px 14px 6px;
+  }
+  .chart-canvas svg { display: block; width: 100%; height: 240px; }
+  .chart-bar {
+    cursor: pointer; transition: opacity .12s;
+  }
+  .chart-bar:hover { opacity: .85; }
+  .chart-axis-y { font-size: 10px; fill: var(--muted); }
+  .chart-axis-x { font-size: 10px; fill: var(--muted); }
+  .chart-grid { stroke: var(--border); stroke-dasharray: 2 3; }
+  .chart-bar-label { font-size: 10px; fill: var(--text); font-weight: 600; pointer-events: none; }
+  .chart-legend {
+    display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px;
+    font-size: 11px; color: var(--muted);
+  }
+  .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .chart-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
   /* Progress card */
   .progress-grid {
     display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
@@ -1077,6 +1108,28 @@
     <h2>Users &amp; Chat</h2>
     <p class="subtitle">Everyone signed up. Green dot = online now, amber = seen today. Click a user to open a chat.</p>
     <div class="users-list" id="usersList"></div>
+  </section>
+
+  <section class="card full chart-card" id="bookingsChartCard">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+      <div>
+        <h2>Bookings Per Day</h2>
+        <p class="subtitle">People scheduled to train each day — includes every assigned team member.</p>
+      </div>
+      <div class="chart-toolbar">
+        <button type="button" data-chart-range="14" class="active">14d</button>
+        <button type="button" data-chart-range="30">30d</button>
+        <button type="button" data-chart-range="60">60d</button>
+        <button type="button" data-chart-range="90">90d</button>
+      </div>
+    </div>
+    <div class="chart-canvas" id="bookingsChart"></div>
+    <div class="chart-legend">
+      <span><i style="background:var(--brand);"></i> Scheduled</span>
+      <span><i style="background:var(--good);"></i> Completed</span>
+      <span><i style="background:var(--warn);"></i> Postponed</span>
+      <span><i style="background:var(--bad); opacity:.7;"></i> Cancelled</span>
+    </div>
   </section>
 
   <section class="card full" id="progressCard">
@@ -1962,8 +2015,114 @@
   }
   function stopPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
 
+  /* ---------- Bookings-per-day chart ---------- */
+  let chartRangeDays = 14;
+  document.querySelectorAll("[data-chart-range]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      chartRangeDays = Number(btn.dataset.chartRange);
+      document.querySelectorAll("[data-chart-range]").forEach(b => b.classList.toggle("active", b === btn));
+      renderBookingsChart();
+    });
+  });
+
+  function renderBookingsChart() {
+    const host = $("#bookingsChart"); if (!host) return;
+
+    // X axis: today → today + (chartRangeDays - 1)
+    const days = [];
+    const start = new Date(); start.setHours(0,0,0,0);
+    for (let i = 0; i < chartRangeDays; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      days.push(toISO(d));
+    }
+
+    // Bucket every attendee entry by its booking date
+    const entries = expandAttendees();
+    const perDay = Object.fromEntries(days.map(d => [d, { Scheduled:0, Completed:0, Postponed:0, Cancelled:0, total:0 }]));
+    entries.forEach(e => {
+      // e.status is known; the booking date isn't on the entry, so look it up via state.bookings
+    });
+    // Rebuild with access to booking dates
+    state.bookings.forEach(b => {
+      const date = b.date;
+      if (!perDay[date]) return; // outside range
+      const st = b.status || "Scheduled";
+      const count = b.role === "UnitHead" ? Math.max((b.teamMembers||[]).length, 1) : Math.max(Number(b.attendees)||1, 1);
+      perDay[date][st] = (perDay[date][st] || 0) + count;
+      perDay[date].total += count;
+    });
+
+    const maxVal = Math.max(1, ...days.map(d => perDay[d].total));
+    // Nice ceiling: round up to next multiple
+    const step = maxVal <= 5 ? 1 : maxVal <= 10 ? 2 : maxVal <= 25 ? 5 : maxVal <= 50 ? 10 : 20;
+    const ceil = Math.ceil(maxVal / step) * step;
+
+    // Geometry
+    const W = Math.max(560, days.length * 36 + 60);
+    const H = 240;
+    const padL = 36, padR = 12, padT = 16, padB = 34;
+    const innerW = W - padL - padR;
+    const innerH = H - padT - padB;
+    const barW = Math.max(6, (innerW / days.length) * 0.7);
+    const slot = innerW / days.length;
+
+    const colorFor = (st) => ({ Scheduled: "var(--brand)", Completed: "var(--good)", Postponed: "var(--warn)", Cancelled: "var(--bad)" }[st]);
+
+    // Y-axis ticks (5 ticks incl 0)
+    const ticks = 5;
+    const tickLabels = [];
+    for (let t = 0; t <= ticks; t++) {
+      const v = Math.round((ceil * t) / ticks);
+      tickLabels.push({ v, y: padT + innerH - (v / ceil) * innerH });
+    }
+
+    const fmtDay = (iso) => {
+      const d = new Date(iso + "T00:00:00");
+      return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    };
+
+    const bars = days.map((iso, i) => {
+      const bucket = perDay[iso];
+      if (bucket.total === 0) return "";
+      const x = padL + slot * i + (slot - barW) / 2;
+      let yCursor = padT + innerH;
+      const segs = ["Scheduled","Completed","Postponed","Cancelled"].map(st => {
+        const v = bucket[st] || 0;
+        if (!v) return "";
+        const h = (v / ceil) * innerH;
+        yCursor -= h;
+        const op = st === "Cancelled" ? "0.7" : "1";
+        return `<rect class="chart-bar" x="${x}" y="${yCursor}" width="${barW}" height="${h}" fill="${colorFor(st)}" opacity="${op}"><title>${fmtDay(iso)} · ${st}: ${v}</title></rect>`;
+      }).join("");
+      const labelY = (padT + innerH) - (bucket.total / ceil) * innerH - 4;
+      return `${segs}<text class="chart-bar-label" x="${x + barW/2}" y="${labelY}" text-anchor="middle">${bucket.total}</text>`;
+    }).join("");
+
+    const gridY = tickLabels.map(t => `<line class="chart-grid" x1="${padL}" x2="${W - padR}" y1="${t.y}" y2="${t.y}"/>`).join("");
+    const tickText = tickLabels.map(t => `<text class="chart-axis-y" x="${padL - 6}" y="${t.y + 3}" text-anchor="end">${t.v}</text>`).join("");
+
+    // X labels — show ~8 evenly spaced
+    const labelStep = Math.max(1, Math.ceil(days.length / 8));
+    const xLabels = days.map((iso, i) => {
+      if (i % labelStep !== 0 && i !== days.length - 1) return "";
+      const x = padL + slot * i + slot / 2;
+      const d = new Date(iso + "T00:00:00");
+      const isToday = iso === toISO(new Date());
+      return `<text class="chart-axis-x" x="${x}" y="${H - 14}" text-anchor="middle" ${isToday ? 'font-weight="700" fill="var(--brand)"' : ""}>${d.toLocaleDateString(undefined, { month:"short", day:"numeric" })}</text>`;
+    }).join("");
+
+    host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="Bookings per day">
+      ${gridY}
+      <line x1="${padL}" x2="${W - padR}" y1="${padT + innerH}" y2="${padT + innerH}" stroke="var(--border-strong)" />
+      ${tickText}
+      ${bars}
+      ${xLabels}
+      <text class="chart-axis-y" x="10" y="${padT + 8}" transform="rotate(-90 10 ${padT + 8})">People</text>
+    </svg>`;
+  }
+
   function renderAll() {
-    renderStats(); renderCalendar(); renderDay(); renderTable(); renderMyBookings(); renderProgress(); renderUsers();
+    renderStats(); renderCalendar(); renderDay(); renderTable(); renderMyBookings(); renderProgress(); renderUsers(); renderBookingsChart();
   }
 
   /* ---------- Booking form (trainee) ---------- */
