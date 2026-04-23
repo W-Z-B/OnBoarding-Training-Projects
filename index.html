@@ -1595,22 +1595,66 @@
   }
 
   /* ---------- Progress ---------- */
+  /*
+   * Flatten every booking into one attendee-entry per person.
+   * A UnitHead booking expands into one entry per named team member
+   * (and NOT the head themselves, since they're organising).
+   * A Member booking is a single entry for the booker.
+   * Each entry inherits the booking's status and unit.
+   */
+  function expandAttendees() {
+    const entries = [];
+    state.bookings.forEach(b => {
+      const st = b.status || "Scheduled";
+      const team = b.teamMembers || [];
+      if (b.role === "UnitHead" && team.length > 0) {
+        team.forEach(tm => {
+          entries.push({
+            personKey: `tm:${(tm.name || "").toLowerCase().trim()}|${(b.unit || "").toLowerCase()}`,
+            personName: tm.name,
+            personSub: `${b.unit} · assigned by ${b.fullName}`,
+            unit: b.unit,
+            status: st,
+            isAssigned: true
+          });
+        });
+      } else {
+        entries.push({
+          personKey: `user:${(b.email || "").toLowerCase()}`,
+          personName: b.fullName,
+          personSub: `${b.unit} · ${b.email}`,
+          unit: b.unit,
+          status: st,
+          isAssigned: false
+        });
+      }
+    });
+    return entries;
+  }
+
   function renderProgress() {
     const peopleWrap = $("#progressPeople");
     const unitsWrap = $("#progressUnits");
     if (!peopleWrap || !unitsWrap) return;
 
-    const groupBy = (key) => {
+    const entries = expandAttendees();
+
+    const bucketize = (keyFn) => {
       const map = {};
-      state.bookings.forEach(b => {
-        const k = typeof key === "function" ? key(b) : b[key];
+      entries.forEach(e => {
+        const k = keyFn(e);
         if (!k) return;
-        if (!map[k]) map[k] = { key: k, sample: b, total: 0, Completed: 0, Scheduled: 0, Postponed: 0, Cancelled: 0, people: new Set(), units: new Set() };
-        const st = b.status || "Scheduled";
-        map[k].total++;
-        map[k][st] = (map[k][st] || 0) + 1;
-        map[k].people.add((b.email||"").toLowerCase());
-        map[k].units.add(b.unit);
+        if (!map[k]) map[k] = {
+          key: k, label: "", sub: "", unit: e.unit,
+          total: 0, Completed: 0, Scheduled: 0, Postponed: 0, Cancelled: 0,
+          people: new Set(), assignedPeople: new Set()
+        };
+        const g = map[k];
+        g.total++;
+        g[e.status] = (g[e.status] || 0) + 1;
+        g.people.add(e.personKey);
+        if (e.isAssigned) g.assignedPeople.add(e.personKey);
+        if (!g.label) { g.label = e.personName; g.sub = e.personSub; }
       });
       return Object.values(map);
     };
@@ -1633,7 +1677,7 @@
           </div>
           <div style="text-align:right;">
             <div style="font-weight:700; font-size:14px;">${pct}%</div>
-            <div class="prow-meta">${done}/${g.total} complete</div>
+            <div class="prow-meta">${done}/${g.total} sessions</div>
           </div>
         </div>
         <div class="bar"><div class="bar-fill" style="width:${pct}%;"></div></div>
@@ -1647,18 +1691,28 @@
       </div>`;
     };
 
-    const peopleGroups = groupBy(b => (b.email||"").toLowerCase())
+    // Each attendee is one row (assigned team members now show up individually).
+    const peopleGroups = bucketize(e => e.personKey)
       .sort((a,b) => (b.Completed/b.total||0) - (a.Completed/a.total||0) || b.total - a.total);
-    const unitGroups = groupBy("unit")
+
+    // Units now include every assigned team member's session.
+    const unitGroups = bucketize(e => e.unit)
       .sort((a,b) => (b.Completed/b.total||0) - (a.Completed/a.total||0));
 
     peopleWrap.innerHTML = peopleGroups.length === 0
       ? `<div class="empty" style="padding:20px; font-size:12px;">No registrations yet.</div>`
-      : peopleGroups.map(g => renderRow(g.sample.fullName, `${g.sample.unit} · ${g.sample.email}`, g)).join("");
+      : peopleGroups.map(g => {
+          const label = entries.find(e => e.personKey === g.key)?.personName || g.label;
+          const sub = entries.find(e => e.personKey === g.key)?.personSub || g.sub;
+          return renderRow(label, sub, g);
+        }).join("");
 
     unitsWrap.innerHTML = unitGroups.length === 0
       ? `<div class="empty" style="padding:20px; font-size:12px;">No registrations yet.</div>`
-      : unitGroups.map(g => renderRow(g.key, `${g.people.size} ${g.people.size === 1 ? "person" : "people"}`, g)).join("");
+      : unitGroups.map(g => {
+          const n = g.people.size;
+          return renderRow(g.key, `${n} ${n === 1 ? "person" : "people"} · ${g.total} session${g.total === 1 ? "" : "s"}`, g);
+        }).join("");
   }
 
   /* ---------- Users directory + Chat ---------- */
