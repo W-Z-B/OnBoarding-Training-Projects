@@ -646,6 +646,121 @@
   .lock-modal .lock-actions { display: flex; gap: 8px; margin-top: 14px; }
   .lock-modal .lock-err { color: var(--bad); font-size: 12px; margin-top: 8px; min-height: 16px; }
 
+  /* Users directory + presence */
+  .users-list { display: grid; gap: 8px; }
+  .user-row {
+    display: grid; grid-template-columns: 40px 1fr auto; gap: 12px;
+    align-items: center; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); cursor: pointer; transition: all .15s;
+    position: relative;
+  }
+  .user-row:hover { border-color: var(--border-strong); background: var(--surface-2); transform: translateY(-1px); }
+  .user-row .avatar { width: 40px; height: 40px; font-size: 13px; border-radius: 12px; }
+  .user-row .name { font-weight: 600; font-size: 13px; display:flex; align-items:center; gap:6px; }
+  .user-row .meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .presence-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    display: inline-block; flex-shrink: 0;
+    background: var(--muted);
+    box-shadow: 0 0 0 2px var(--surface);
+  }
+  .presence-dot.online { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
+  .presence-dot.recent { background: var(--warn); }
+  .user-row .unread-badge {
+    min-width: 20px; height: 20px; padding: 0 6px;
+    border-radius: 10px; background: var(--brand); color: white;
+    font-size: 10px; font-weight: 700; display: grid; place-items: center;
+  }
+
+  /* Chat panel */
+  .chat-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: min(420px, 100%);
+    background: var(--surface); border-left: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(100%); transition: transform .28s cubic-bezier(.2,.8,.2,1);
+    z-index: 52; display: flex; flex-direction: column;
+  }
+  .chat-drawer.open { transform: translateX(0); }
+  .chat-header {
+    padding: 16px 18px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .chat-header .info { flex: 1; min-width: 0; }
+  .chat-header .info .name { font-weight: 700; font-size: 14px; letter-spacing: -0.02em; }
+  .chat-header .info .sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .chat-body {
+    flex: 1; overflow-y: auto; padding: 18px;
+    display: flex; flex-direction: column; gap: 10px;
+    background: var(--surface-2);
+  }
+  .chat-msg {
+    max-width: 78%; padding: 9px 13px;
+    border-radius: 16px; font-size: 13px; line-height: 1.45;
+    word-wrap: break-word; white-space: pre-wrap;
+  }
+  .chat-msg.mine {
+    align-self: flex-end;
+    background: var(--brand); color: white;
+    border-bottom-right-radius: 4px;
+  }
+  .chat-msg.theirs {
+    align-self: flex-start;
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+  .chat-msg .ts { display: block; font-size: 10px; opacity: .6; margin-top: 4px; }
+  .chat-form {
+    padding: 12px; border-top: 1px solid var(--border);
+    display: flex; gap: 8px; background: var(--surface);
+  }
+  .chat-form textarea {
+    resize: none; padding: 9px 12px; font-size: 13px;
+    min-height: 40px; max-height: 120px; flex: 1;
+  }
+  .chat-form button { margin: 0; padding: 0 16px; }
+
+  .forward-btn {
+    background: transparent; border: 0; color: var(--muted);
+    cursor: pointer; padding: 4px; border-radius: 6px;
+    display: grid; place-items: center;
+  }
+  .forward-btn:hover { background: var(--brand-soft); color: var(--brand); }
+
+  /* Topbar messages button */
+  .messages-btn { position: relative; }
+  .messages-btn .dot {
+    position: absolute; top: 6px; right: 6px;
+    min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 8px; background: var(--bad); color: white;
+    font-size: 9px; font-weight: 700; display: none;
+    align-items: center; justify-content: center;
+    border: 2px solid var(--bg);
+  }
+  .messages-btn.has-unread .dot { display: flex; }
+
+  /* Forward modal */
+  .fwd-modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(15,23,42,.5);
+    backdrop-filter: blur(4px);
+    display: none; align-items: center; justify-content: center;
+    z-index: 55; padding: 20px;
+  }
+  .fwd-modal-backdrop.open { display: flex; }
+  .fwd-modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 22px;
+    box-shadow: var(--shadow-lg);
+    width: min(380px, 100%);
+  }
+  .fwd-modal h3 { margin: 0 0 6px; font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+  .fwd-modal p { margin: 0 0 14px; color: var(--muted); font-size: 12px; }
+  .fwd-choices { max-height: 240px; overflow-y: auto; margin: 10px 0; }
+  .fwd-choices .user-row { margin-bottom: 6px; }
+
   /* Fade-in */
   .fade-in { animation: fadeIn .3s ease-out; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
@@ -763,6 +878,10 @@
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         </button>
       </span>
+      <button class="icon-btn messages-btn" id="messagesBtn" title="Messages" aria-label="Messages" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span class="dot" id="unreadDot">0</span>
+      </button>
       <button class="icon-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">
         <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
       </button>
@@ -937,6 +1056,12 @@
     <div id="dayList"><div class="empty">Pick a date on the calendar above.</div></div>
   </section>
 
+  <section class="card" id="usersCard">
+    <h2>Users &amp; Chat</h2>
+    <p class="subtitle">Everyone signed up. Green dot = online now, amber = seen today. Click a user to open a chat.</p>
+    <div class="users-list" id="usersList"></div>
+  </section>
+
   <section class="card full" id="progressCard">
     <h2>Training Progress</h2>
     <p class="subtitle">Completion status per person and per unit — based on Completed vs total registered sessions.</p>
@@ -991,6 +1116,38 @@
     <div class="lock-actions">
       <button type="button" class="btn ghost" id="lockCancel" style="flex:1; margin:0;">Cancel</button>
       <button type="button" class="btn" id="lockSubmit" style="flex:1; margin:0;">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<!-- Chat drawer -->
+<div class="drawer-backdrop" id="chatBackdrop"></div>
+<aside class="chat-drawer" id="chatDrawer" aria-hidden="true">
+  <div class="chat-header">
+    <div class="avatar" id="chatAvatar">—</div>
+    <div class="info">
+      <div class="name" id="chatName">Conversation</div>
+      <div class="sub" id="chatSub">—</div>
+    </div>
+    <button class="icon-btn" id="closeChat" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="chat-body" id="chatBody"></div>
+  <form class="chat-form" id="chatForm">
+    <textarea id="chatInput" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" rows="1"></textarea>
+    <button type="submit" class="btn">Send</button>
+  </form>
+</aside>
+
+<!-- Forward modal -->
+<div class="fwd-modal-backdrop" id="fwdBackdrop" role="dialog" aria-modal="true">
+  <div class="fwd-modal">
+    <h3>Forward note</h3>
+    <p id="fwdPreview">—</p>
+    <div class="fwd-choices" id="fwdChoices"></div>
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button type="button" class="btn ghost" id="fwdCancel" style="flex:1; margin:0;">Cancel</button>
     </div>
   </div>
 </div>
@@ -1187,9 +1344,14 @@
         document.querySelectorAll("[data-view-btn]").forEach(b => b.classList.toggle("active", b.dataset.viewBtn === "trainee"));
         sessionStorage.removeItem(AUTH_KEY);
       }
-      await refreshBookings();
+      $("#messagesBtn").style.display = "grid";
+      await Promise.all([refreshBookings(), refreshUsers()]);
+      refreshUnread();
+      startPolling();
     } else {
       $("#userChip").style.display = "none";
+      $("#messagesBtn").style.display = "none";
+      stopPolling();
     }
     renderAll();
   }
@@ -1476,8 +1638,219 @@
       : unitGroups.map(g => renderRow(g.key, `${g.people.size} ${g.people.size === 1 ? "person" : "people"}`, g)).join("");
   }
 
+  /* ---------- Users directory + Chat ---------- */
+  let usersCache = [];
+  let threadsCache = [];
+  let activeChatUserId = null;
+  let chatMessages = [];
+
+  function presenceClass(lastSeen) {
+    if (!lastSeen) return "";
+    const ageMin = (Date.now() - new Date(lastSeen).getTime()) / 60000;
+    if (ageMin < 3) return "online";
+    if (ageMin < 60 * 24) return "recent";
+    return "";
+  }
+  function presenceLabel(lastSeen) {
+    if (!lastSeen) return "Never seen";
+    const ageMin = (Date.now() - new Date(lastSeen).getTime()) / 60000;
+    if (ageMin < 3) return "Online now";
+    if (ageMin < 60) return `Seen ${Math.floor(ageMin)}m ago`;
+    if (ageMin < 60 * 24) return `Seen ${Math.floor(ageMin/60)}h ago`;
+    const d = Math.floor(ageMin/(60*24));
+    return `Seen ${d}d ago`;
+  }
+
+  async function refreshUsers() {
+    if (!state.user) return;
+    try {
+      const [u, t] = await Promise.all([
+        api("GET", "/api/users"),
+        api("GET", "/api/messages/threads")
+      ]);
+      usersCache = u.users || [];
+      threadsCache = t.threads || [];
+    } catch { /* ignore */ }
+  }
+
+  function unreadForUser(otherId) {
+    const th = threadsCache.find(t => t.other_id === otherId);
+    return th ? Number(th.unread) || 0 : 0;
+  }
+
+  function renderUsers() {
+    const wrap = $("#usersList");
+    if (!wrap) return;
+    const me = state.user && state.user.id;
+    const others = usersCache.filter(u => u.id !== me);
+    if (others.length === 0) {
+      wrap.innerHTML = `<div class="empty" style="padding:18px; font-size:12px;">No users yet.</div>`;
+      return;
+    }
+    wrap.innerHTML = others.map(u => {
+      const pres = presenceClass(u.lastSeenAt);
+      const unread = unreadForUser(u.id);
+      return `<div class="user-row fade-in" data-user-id="${u.id}">
+        <div class="avatar">${escapeHtml(initials(u.fullName))}</div>
+        <div>
+          <div class="name">
+            <span class="presence-dot ${pres}" title="${presenceLabel(u.lastSeenAt)}"></span>
+            ${escapeHtml(u.fullName)}
+            ${u.isTrainer ? `<span class="chip" style="background:var(--brand-soft); color:var(--brand);">Trainer</span>` : ""}
+          </div>
+          <div class="meta">${escapeHtml(u.unit)} · @${escapeHtml(u.username)} · ${presenceLabel(u.lastSeenAt)}</div>
+        </div>
+        ${unread ? `<span class="unread-badge">${unread}</span>` : ""}
+      </div>`;
+    }).join("");
+    wrap.querySelectorAll("[data-user-id]").forEach(el => {
+      el.addEventListener("click", () => openChat(Number(el.dataset.userId)));
+    });
+  }
+
+  async function openChat(otherId) {
+    if (!state.user) return;
+    activeChatUserId = otherId;
+    const other = usersCache.find(u => u.id === otherId);
+    $("#chatAvatar").textContent = initials(other?.fullName || "?");
+    $("#chatName").textContent = other?.fullName || "User";
+    $("#chatSub").textContent = other ? `${other.unit} · ${presenceLabel(other.lastSeenAt)}` : "";
+    $("#chatDrawer").classList.add("open");
+    $("#chatDrawer").setAttribute("aria-hidden", "false");
+    $("#chatBackdrop").classList.add("open");
+    await loadChatMessages();
+  }
+  function closeChat() {
+    activeChatUserId = null;
+    $("#chatDrawer").classList.remove("open");
+    $("#chatDrawer").setAttribute("aria-hidden", "true");
+    $("#chatBackdrop").classList.remove("open");
+    refreshUnread(); refreshUsers().then(renderUsers);
+  }
+  $("#closeChat").addEventListener("click", closeChat);
+  $("#chatBackdrop").addEventListener("click", closeChat);
+
+  async function loadChatMessages() {
+    if (!activeChatUserId) return;
+    try {
+      const { messages } = await api("GET", `/api/messages/${activeChatUserId}`);
+      chatMessages = messages;
+      renderChatBody();
+    } catch (err) {
+      $("#chatBody").innerHTML = `<div class="empty" style="padding:20px;">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  function renderChatBody() {
+    const body = $("#chatBody");
+    if (chatMessages.length === 0) {
+      body.innerHTML = `<div class="empty" style="padding:20px; font-size:12px;">No messages yet. Say hello 👋</div>`;
+      return;
+    }
+    body.innerHTML = chatMessages.map(m => {
+      const mine = m.sender_id === state.user.id;
+      return `<div class="chat-msg ${mine ? "mine" : "theirs"}">${escapeHtml(m.text)}<span class="ts">${new Date(m.created_at).toLocaleString(undefined, { dateStyle:"short", timeStyle:"short" })}</span></div>`;
+    }).join("");
+    body.scrollTop = body.scrollHeight;
+  }
+
+  $("#chatForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = $("#chatInput").value.trim();
+    if (!text || !activeChatUserId) return;
+    try {
+      await api("POST", "/api/messages", { recipientId: activeChatUserId, text });
+      $("#chatInput").value = "";
+      await loadChatMessages();
+      refreshUnread(); refreshUsers().then(renderUsers);
+    } catch (err) { showMsg(err.message, "err"); }
+  });
+  $("#chatInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#chatForm").requestSubmit(); }
+  });
+
+  async function refreshUnread() {
+    if (!state.user) return;
+    try {
+      const { unread } = await api("GET", "/api/messages/unread-count");
+      const btn = $("#messagesBtn");
+      btn.classList.toggle("has-unread", unread > 0);
+      $("#unreadDot").textContent = unread > 99 ? "99+" : String(unread);
+    } catch {}
+  }
+
+  $("#messagesBtn").addEventListener("click", async () => {
+    await refreshUsers();
+    // Trainees jump straight to the trainer chat
+    if (!state.user.isTrainer) {
+      const trainer = usersCache.find(u => u.isTrainer);
+      if (trainer) openChat(trainer.id);
+      else showMsg("Trainer account not found yet.", "err");
+    } else {
+      // Trainer: if chat drawer open, just refresh; otherwise scroll to users card
+      $("#usersCard")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+
+  /* ---------- Forward note modal ---------- */
+  let forwardingNoteId = null;
+  function openForwardModal(noteId, preview) {
+    forwardingNoteId = noteId;
+    $("#fwdPreview").textContent = preview.length > 120 ? preview.slice(0,120) + "…" : preview;
+    const choices = $("#fwdChoices");
+    const me = state.user.id;
+    const others = usersCache.filter(u => u.id !== me);
+    choices.innerHTML = others.length === 0
+      ? `<div class="empty" style="padding:14px; font-size:12px;">No one to forward to.</div>`
+      : others.map(u => `
+        <div class="user-row" data-fwd-to="${u.id}">
+          <div class="avatar">${escapeHtml(initials(u.fullName))}</div>
+          <div>
+            <div class="name">${escapeHtml(u.fullName)}${u.isTrainer ? ` <span class="chip" style="background:var(--brand-soft); color:var(--brand);">Trainer</span>` : ""}</div>
+            <div class="meta">${escapeHtml(u.unit)} · @${escapeHtml(u.username)}</div>
+          </div>
+          <span></span>
+        </div>`).join("");
+    choices.querySelectorAll("[data-fwd-to]").forEach(el => el.addEventListener("click", () => submitForward(Number(el.dataset.fwdTo))));
+    $("#fwdBackdrop").classList.add("open");
+  }
+  function closeForwardModal() { $("#fwdBackdrop").classList.remove("open"); forwardingNoteId = null; }
+  $("#fwdCancel").addEventListener("click", closeForwardModal);
+  $("#fwdBackdrop").addEventListener("click", (e) => { if (e.target.id === "fwdBackdrop") closeForwardModal(); });
+
+  async function submitForward(recipientId) {
+    if (!forwardingNoteId) return;
+    try {
+      await api("POST", "/api/messages", { recipientId, forwardedNoteId: forwardingNoteId });
+      closeForwardModal();
+      showMsg("Note forwarded.", "ok");
+      refreshUnread(); refreshUsers().then(renderUsers);
+      // If chat with recipient is open, reload
+      if (activeChatUserId === recipientId) await loadChatMessages();
+    } catch (err) { showMsg(err.message, "err"); }
+  }
+
+  // Expose hooks for renderDrawerLists' forward buttons
+  window.__gplForwardNote = (noteId, preview) => {
+    refreshUsers().then(() => openForwardModal(noteId, preview));
+  };
+
+  /* ---------- Polling for unread / presence ---------- */
+  let pollTimer = null;
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(async () => {
+      if (!state.user) return;
+      await refreshUsers();
+      if (state.view === "trainer") renderUsers();
+      refreshUnread();
+      if (activeChatUserId && $("#chatDrawer").classList.contains("open")) await loadChatMessages();
+    }, 20000);
+  }
+  function stopPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+
   function renderAll() {
-    renderStats(); renderCalendar(); renderDay(); renderTable(); renderMyBookings(); renderProgress();
+    renderStats(); renderCalendar(); renderDay(); renderTable(); renderMyBookings(); renderProgress(); renderUsers();
   }
 
   /* ---------- Booking form (trainee) ---------- */
@@ -1704,15 +2077,27 @@
     $("#notesList").innerHTML = notes.length === 0
       ? `<div class="empty" style="padding:16px;">No notes yet.</div>`
       : notes.map(n => `
-        <div class="note-item fade-in">
+        <div class="note-item fade-in" data-note-preview="${escapeHtml(n.text)}">
           <div class="note-date">
             <span>${new Date(n.createdAt).toLocaleString(undefined, { dateStyle:"medium", timeStyle:"short" })}</span>
-            <button class="fdelete" data-note-id="${n.id}" title="Delete note" style="border:0;background:transparent;cursor:pointer;color:var(--muted);">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            </button>
+            <span style="display:flex; gap:2px;">
+              <button class="forward-btn" data-fwd-note-id="${n.id}" title="Forward note">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+              </button>
+              <button class="fdelete" data-note-id="${n.id}" title="Delete note" style="border:0;background:transparent;cursor:pointer;color:var(--muted);">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </span>
           </div>
           <div class="note-body">${escapeHtml(n.text)}</div>
         </div>`).join("");
+
+    $("#notesList").querySelectorAll("[data-fwd-note-id]").forEach(b => b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const noteEl = b.closest(".note-item");
+      const preview = noteEl ? noteEl.getAttribute("data-note-preview") : "";
+      window.__gplForwardNote(b.dataset.fwdNoteId, preview);
+    }));
 
     $("#matList").innerHTML = mats.length === 0 ? "" : mats.map(m => `
       <div class="material-item fade-in">

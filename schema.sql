@@ -76,6 +76,23 @@ CREATE TABLE IF NOT EXISTS materials (
 );
 CREATE INDEX IF NOT EXISTS materials_booking_idx ON materials(booking_id, uploaded_at);
 
+-- Presence tracking
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+
+-- Direct messages between users (with optional forwarded-note link)
+CREATE TABLE IF NOT EXISTS messages (
+  id            TEXT PRIMARY KEY,
+  sender_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  recipient_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  text          TEXT NOT NULL,
+  forwarded_note_id TEXT REFERENCES study_notes(id) ON DELETE SET NULL,
+  forwarded_booking_id TEXT REFERENCES bookings(id) ON DELETE SET NULL,
+  read_at       TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS messages_pair_idx ON messages(LEAST(sender_id, recipient_id), GREATEST(sender_id, recipient_id), created_at);
+CREATE INDEX IF NOT EXISTS messages_recipient_unread_idx ON messages(recipient_id, read_at) WHERE read_at IS NULL;
+
 -- One-time cleanup (safe no-ops if already applied). Older schema
 -- had users.email UNIQUE which conflicts with our new LOWER(email) index.
 DO $$ BEGIN

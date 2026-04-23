@@ -95,7 +95,20 @@ async function getSessionUser(req) {
      WHERE s.token = $1 AND s.expires_at > NOW()`,
     [token]
   );
-  return rows[0] || null;
+  const u = rows[0] || null;
+  // Opportunistic last-seen update (best effort, doesn't block)
+  if (u) query(`UPDATE users SET last_seen_at = NOW() WHERE id = $1`, [u.id]).catch(() => {});
+  return u;
+}
+
+function publicUserListRow(u) {
+  return {
+    id: u.id, username: u.username, fullName: u.full_name,
+    email: u.email, unit: u.unit, phone: u.phone,
+    isTrainer: isTrainerUser(u),
+    lastSeenAt: u.last_seen_at,
+    createdAt: u.created_at
+  };
 }
 
 /* Ownership: only booking owner or trainer may mutate. */
@@ -452,6 +465,130 @@ route("DELETE", /^\/api\/bookings\/([^/]+)\/team\/([^/]+)$/, async (req, res, [,
   await query(`DELETE FROM team_members WHERE id = $1 AND booking_id = $2`, [mid, bid]);
   await query(`UPDATE bookings SET attendees = GREATEST(1, (SELECT COUNT(*) FROM team_members WHERE booking_id = $1)) WHERE id = $1`, [bid]);
   json(res, 200, { booking: await serializeOneBooking(bid) });
+});
+
+/* USERS directory */
+route("GET", /^\/api\/users$/, async (req, res) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  let rows;
+  if (isTrainerUser(user)) {
+    ({ rows } = await query(`SELECT * FROM users ORDER BY full_name`));
+  } else {
+    // Trainees only see the trainer so they know who to chat with
+    ({ rows } = await query(
+      `SELECT * FROM users WHERE LOWER(TRIM(full_name)) = LOWER(TRIM($1)) OR id = $2 ORDER BY id = $2 DESC`,
+      [TRAINER_FULL_NAME, user.id]
+    ));
+  }
+  json(res, 200, { users: rows.map(publicUserListRow) });
+});
+
+/* MESSAGES */
+route("GET", /^\/api\/messages\/threads$/, async (req, res) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  // For the current user, return distinct other-party user_ids with last message + unread count
+  const { rows } = await query(
+    `SELECT
+       CASE WHEN sender_id = $1 THEN recipient_id ELSE sender_id END AS other_id,
+       MAX(created_at) AS last_at,
+       SUM(CASE WHEN recipient_id = $1 AND read_at IS NULL THEN 1 ELSE 0 END)::int AS unread
+     FROM messages
+     WHERE sender_id = $1 OR recipient_id = $1
+     GROUP BY other_id
+     ORDER BY last_at DESC`,
+    [user.id]
+  );
+  json(res, 200, { threads: rows });
+});
+
+route("GET", /^\/api\/messages\/unread-count$/, async (req, res) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  const { rows } = await query(
+    `SELECT COUNT(*)::int AS n FROM messages WHERE recipient_id = $1 AND read_at IS NULL`,
+    [user.id]
+  );
+  json(res, 200, { unread: rows[0].n });
+});
+
+route("GET", /^\/api\/messages\/([0-9]+)$/, async (req, res, [, otherId]) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  const other = Number(otherId);
+
+  // Trainees may only chat with the trainer
+  if (!isTrainerUser(user)) {
+    const { rows: tr } = await query(
+      `SELECT id FROM users WHERE LOWER(TRIM(full_name)) = LOWER(TRIM($1)) LIMIT 1`,
+      [TRAINER_FULL_NAME]
+    );
+    const trainerId = tr[0]?.id;
+    if (!trainerId || other !== trainerId) return json(res, 403, { error: "You can only message the trainer." });
+  }
+
+  const { rows } = await query(
+    `SELECT id, sender_id, recipient_id, text, forwarded_note_id, forwarded_booking_id, read_at, created_at
+     FROM messages
+     WHERE (sender_id = $1 AND recipient_id = $2) OR (sender_id = $2 AND recipient_id = $1)
+     ORDER BY created_at`,
+    [user.id, other]
+  );
+  // Mark any inbound messages as read
+  await query(`UPDATE messages SET read_at = NOW() WHERE recipient_id = $1 AND sender_id = $2 AND read_at IS NULL`, [user.id, other]);
+  json(res, 200, { messages: rows });
+});
+
+route("POST", /^\/api\/messages$/, async (req, res) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  const { recipientId, text = "", forwardedNoteId = null, forwardedBookingId = null } = await readBody(req);
+  const rid = Number(recipientId);
+  if (!rid || rid === user.id) return json(res, 400, { error: "Invalid recipient." });
+  if (!text.trim() && !forwardedNoteId) return json(res, 400, { error: "Empty message." });
+
+  // Trainees may only DM the trainer
+  if (!isTrainerUser(user)) {
+    const { rows: tr } = await query(
+      `SELECT id FROM users WHERE LOWER(TRIM(full_name)) = LOWER(TRIM($1)) LIMIT 1`,
+      [TRAINER_FULL_NAME]
+    );
+    const trainerId = tr[0]?.id;
+    if (!trainerId || rid !== trainerId) return json(res, 403, { error: "You can only message the trainer." });
+  }
+
+  // Recipient exists
+  const { rowCount } = await query(`SELECT 1 FROM users WHERE id = $1`, [rid]);
+  if (!rowCount) return json(res, 404, { error: "Recipient not found." });
+
+  // If forwarding a note, expand the text on the server so the receiver sees context
+  let finalText = text.trim();
+  let bookingLink = forwardedBookingId || null;
+  if (forwardedNoteId) {
+    const { rows: n } = await query(
+      `SELECT sn.text AS note_text, b.id AS booking_id, b.full_name AS booking_name, b.level, b.date, b."time"
+       FROM study_notes sn JOIN bookings b ON b.id = sn.booking_id
+       WHERE sn.id = $1`,
+      [forwardedNoteId]
+    );
+    if (!n[0]) return json(res, 404, { error: "Note not found." });
+    // Only the note's booking owner or trainer can forward it
+    const auth = await canMutateBooking(user, n[0].booking_id);
+    if (!auth.ok) return json(res, 403, { error: "Not authorised to forward this note." });
+    bookingLink = n[0].booking_id;
+    const header = `↗️ Forwarded note — ${n[0].level}, ${n[0].date} ${n[0].time} (${n[0].booking_name}):\n\n${n[0].note_text}`;
+    finalText = finalText ? `${finalText}\n\n${header}` : header;
+  }
+
+  const id = uid();
+  await query(
+    `INSERT INTO messages (id, sender_id, recipient_id, text, forwarded_note_id, forwarded_booking_id)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [id, user.id, rid, finalText, forwardedNoteId, bookingLink]
+  );
+  const { rows } = await query(`SELECT * FROM messages WHERE id = $1`, [id]);
+  json(res, 200, { message: rows[0] });
 });
 
 /* ----- Static files ----- */
