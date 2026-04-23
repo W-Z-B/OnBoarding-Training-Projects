@@ -1,13 +1,17 @@
 {
   "name": "gpl-vpmo-training",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "GPL VPMO onboarding & training scheduler",
+  "description": "GPL VPMO onboarding & training scheduler — Postgres-backed",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "migrate": "node -e \"require('./db').migrate().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\""
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
   }
 }

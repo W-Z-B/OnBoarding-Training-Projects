@@ -1,9 +1,14 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
+const { query, migrate } = require("./db");
 
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
+const TRAINER_PASSWORD = process.env.TRAINER_PASSWORD || "vpmo2026";
+const MAX_BODY = 10 * 1024 * 1024; // 10 MB (materials are base64-encoded)
+const SESSION_TTL_DAYS = 30;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -16,41 +21,385 @@ const MIME = {
   ".svg":  "image/svg+xml",
   ".ico":  "image/x-icon",
   ".webp": "image/webp",
-  ".woff": "font/woff",
-  ".woff2":"font/woff2",
   ".txt":  "text/plain; charset=utf-8"
 };
 
-const server = http.createServer((req, res) => {
-  try {
-    const urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
-    let rel = urlPath === "/" ? "/index.html" : urlPath;
-    // prevent path traversal
-    const filePath = path.normalize(path.join(ROOT, rel));
-    if (!filePath.startsWith(ROOT)) { res.writeHead(403); return res.end("Forbidden"); }
-
-    fs.stat(filePath, (err, stat) => {
-      if (err || !stat.isFile()) {
-        // SPA fallback
-        const fallback = path.join(ROOT, "index.html");
-        return fs.readFile(fallback, (e, buf) => {
-          if (e) { res.writeHead(404); return res.end("Not found"); }
-          res.writeHead(200, { "Content-Type": MIME[".html"] });
-          res.end(buf);
-        });
-      }
-      const ext = path.extname(filePath).toLowerCase();
-      res.writeHead(200, {
-        "Content-Type": MIME[ext] || "application/octet-stream",
-        "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=3600"
-      });
-      fs.createReadStream(filePath).pipe(res);
+/* ----- helpers ----- */
+function send(res, status, body, headers = {}) {
+  const isStr = typeof body === "string";
+  res.writeHead(status, {
+    "Content-Type": isStr ? "text/plain; charset=utf-8" : "application/json; charset=utf-8",
+    ...headers
+  });
+  res.end(isStr ? body : JSON.stringify(body));
+}
+function json(res, status, obj, headers) { send(res, status, obj, headers); }
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let total = 0; const chunks = [];
+    req.on("data", (c) => {
+      total += c.length;
+      if (total > MAX_BODY) { reject(new Error("body too large")); req.destroy(); return; }
+      chunks.push(c);
     });
-  } catch (e) {
-    res.writeHead(500); res.end("Server error");
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      if (!raw) return resolve({});
+      try { resolve(JSON.parse(raw)); } catch { reject(new Error("invalid JSON")); }
+    });
+    req.on("error", reject);
+  });
+}
+function parseCookies(header) {
+  const out = {};
+  if (!header) return out;
+  header.split(";").forEach(p => {
+    const i = p.indexOf("=");
+    if (i < 0) return;
+    out[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim());
+  });
+  return out;
+}
+function setCookie(res, name, value, opts = {}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`];
+  if (opts.maxAge) parts.push(`Max-Age=${opts.maxAge}`);
+  parts.push("Path=/", "HttpOnly", "SameSite=Lax");
+  if (process.env.NODE_ENV !== "development") parts.push("Secure");
+  res.setHeader("Set-Cookie", parts.join("; "));
+}
+function clearCookie(res, name) {
+  res.setHeader("Set-Cookie", `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${process.env.NODE_ENV !== "development" ? "; Secure" : ""}`);
+}
+function hashPassword(password, salt) {
+  return crypto.scryptSync(password, salt, 64).toString("hex");
+}
+function genToken() { return crypto.randomBytes(32).toString("hex"); }
+function uid() { return crypto.randomUUID(); }
+function validEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
+function validPhone(s) { return /^[+\d][\d\s\-().]{5,}$/.test(s); }
+function validUsername(s) { return /^[a-z0-9._-]{3,}$/i.test(s); }
+
+async function getSessionUser(req) {
+  const token = parseCookies(req.headers.cookie)["sid"];
+  if (!token) return null;
+  const { rows } = await query(
+    `SELECT u.* FROM users u JOIN sessions s ON s.user_id = u.id
+     WHERE s.token = $1 AND s.expires_at > NOW()`,
+    [token]
+  );
+  return rows[0] || null;
+}
+
+/* ----- DB -> client shape ----- */
+async function serializeBooking(row) {
+  const { rows: team } = await query(`SELECT id, name FROM team_members WHERE booking_id = $1 ORDER BY created_at`, [row.id]);
+  const { rows: notes } = await query(`SELECT id, text, created_at FROM study_notes WHERE booking_id = $1 ORDER BY created_at DESC`, [row.id]);
+  const { rows: mats } = await query(`SELECT id, name, size, mime, data, uploaded_at FROM materials WHERE booking_id = $1 ORDER BY uploaded_at`, [row.id]);
+  return {
+    id: row.id,
+    fullName: row.full_name,
+    email: row.email,
+    phone: row.phone,
+    unit: row.unit,
+    level: row.level,
+    role: row.role,
+    attendees: row.attendees,
+    date: row.date instanceof Date ? row.date.toISOString().slice(0,10) : row.date,
+    time: row.time,
+    duration: row.duration,
+    format: row.format,
+    notes: row.notes || "",
+    status: row.status,
+    completedAt: row.completed_at,
+    cancelledAt: row.cancelled_at,
+    postponedTo: row.postponed_to ? (row.postponed_to instanceof Date ? row.postponed_to.toISOString().slice(0,10) : row.postponed_to) : null,
+    postponedTime: row.postponed_time,
+    createdAt: row.created_at,
+    teamMembers: team,
+    studyNotes: notes.map(n => ({ id: n.id, text: n.text, createdAt: n.created_at })),
+    materials: mats.map(m => ({ id: m.id, name: m.name, size: m.size, type: m.mime, data: m.data, uploadedAt: m.uploaded_at }))
+  };
+}
+
+/* ----- API handlers ----- */
+const routes = [];
+function route(method, pattern, handler) {
+  routes.push({ method, pattern, handler });
+}
+
+route("POST", /^\/api\/auth\/signup$/, async (req, res) => {
+  const body = await readBody(req);
+  const fullName = (body.fullName || "").trim();
+  const username = (body.username || "").trim().toLowerCase();
+  const email = (body.email || "").trim();
+  const phone = (body.phone || "").trim();
+  const unit = (body.unit || "").trim();
+  const password = body.password || "";
+
+  if (!fullName || fullName.split(/\s+/).length < 2) return json(res, 400, { error: "Please enter your real full name." });
+  if (!validUsername(username)) return json(res, 400, { error: "Username must be 3+ chars (letters, numbers, . _ -)." });
+  if (!validEmail(email)) return json(res, 400, { error: "Invalid email." });
+  if (!validPhone(phone)) return json(res, 400, { error: "Invalid phone number." });
+  if (!unit) return json(res, 400, { error: "Choose your unit." });
+  if (password.length < 6) return json(res, 400, { error: "Password must be at least 6 characters." });
+
+  const dup = await query(`SELECT 1 FROM users WHERE username = $1 OR LOWER(email) = LOWER($2)`, [username, email]);
+  if (dup.rowCount) return json(res, 409, { error: "Username or email already exists." });
+
+  const salt = crypto.randomBytes(16).toString("hex");
+  const passwordHash = hashPassword(password, salt);
+  const { rows } = await query(
+    `INSERT INTO users (username, email, full_name, phone, unit, salt, password_hash)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [username, email, fullName, phone, unit, salt, passwordHash]
+  );
+  const user = rows[0];
+  const token = genToken();
+  const expires = new Date(Date.now() + SESSION_TTL_DAYS * 86400 * 1000);
+  await query(`INSERT INTO sessions (token, user_id, expires_at) VALUES ($1,$2,$3)`, [token, user.id, expires]);
+  setCookie(res, "sid", token, { maxAge: SESSION_TTL_DAYS * 86400 });
+  json(res, 200, { user: publicUser(user) });
+});
+
+route("POST", /^\/api\/auth\/login$/, async (req, res) => {
+  const { username = "", password = "" } = await readBody(req);
+  const u = username.trim().toLowerCase();
+  const { rows } = await query(`SELECT * FROM users WHERE username = $1`, [u]);
+  const user = rows[0];
+  if (!user) return json(res, 401, { error: "Invalid username or password." });
+  const hash = hashPassword(password, user.salt);
+  if (hash !== user.password_hash) return json(res, 401, { error: "Invalid username or password." });
+
+  const token = genToken();
+  const expires = new Date(Date.now() + SESSION_TTL_DAYS * 86400 * 1000);
+  await query(`INSERT INTO sessions (token, user_id, expires_at) VALUES ($1,$2,$3)`, [token, user.id, expires]);
+  setCookie(res, "sid", token, { maxAge: SESSION_TTL_DAYS * 86400 });
+  json(res, 200, { user: publicUser(user) });
+});
+
+route("POST", /^\/api\/auth\/logout$/, async (req, res) => {
+  const token = parseCookies(req.headers.cookie)["sid"];
+  if (token) await query(`DELETE FROM sessions WHERE token = $1`, [token]);
+  clearCookie(res, "sid");
+  json(res, 200, { ok: true });
+});
+
+route("GET", /^\/api\/auth\/me$/, async (req, res) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Not logged in" });
+  json(res, 200, { user: publicUser(user) });
+});
+
+route("POST", /^\/api\/auth\/trainer$/, async (req, res) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  const { password = "" } = await readBody(req);
+  if (password !== TRAINER_PASSWORD) return json(res, 401, { error: "Wrong trainer password." });
+  json(res, 200, { ok: true });
+});
+
+function publicUser(u) {
+  return { id: u.id, username: u.username, email: u.email, fullName: u.full_name, phone: u.phone, unit: u.unit };
+}
+
+route("GET", /^\/api\/bookings$/, async (req, res) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  const url = new URL(req.url, "http://x");
+  const scope = url.searchParams.get("scope") || "mine";
+  let rows;
+  if (scope === "all") {
+    // In future could require trainer-auth; trainer password is checked on the client before allowing this scope
+    ({ rows } = await query(`SELECT * FROM bookings ORDER BY date, "time"`));
+  } else {
+    ({ rows } = await query(`SELECT * FROM bookings WHERE user_id = $1 ORDER BY date, "time"`, [user.id]));
+  }
+  const out = [];
+  for (const r of rows) out.push(await serializeBooking(r));
+  json(res, 200, { bookings: out });
+});
+
+route("POST", /^\/api\/bookings$/, async (req, res) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  const b = await readBody(req);
+
+  if (!b.level || !b.date || !b.time || !b.duration) return json(res, 400, { error: "Missing booking fields." });
+  const role = b.role === "UnitHead" ? "UnitHead" : "Member";
+  const teamMembers = role === "UnitHead" ? (Array.isArray(b.teamMembers) ? b.teamMembers : []) : [];
+  const attendees = role === "UnitHead" ? teamMembers.length : (Number(b.attendees) || 1);
+  if (role === "UnitHead" && teamMembers.length === 0) return json(res, 400, { error: "Add at least one team member." });
+
+  // Conflict: same user, same date/time overlap
+  const { rows: exist } = await query(`SELECT id, date, "time", duration, full_name FROM bookings WHERE user_id = $1 AND date = $2`, [user.id, b.date]);
+  const toMin = (t) => { const [h,m]=t.split(":").map(Number); return h*60+m; };
+  const ns = toMin(b.time), ne = ns + Number(b.duration);
+  const conflict = exist.find(x => {
+    const xs = toMin(x.time), xe = xs + x.duration;
+    return ns < xe && xs < ne;
+  });
+  if (conflict) return json(res, 409, { error: `Time conflicts with your existing booking at ${conflict.time}.` });
+
+  const id = uid();
+  await query(
+    `INSERT INTO bookings (id, user_id, full_name, email, phone, unit, level, role, attendees, date, "time", duration, format, notes, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'Scheduled')`,
+    [id, user.id, user.full_name, user.email, user.phone, user.unit, b.level, role, attendees, b.date, b.time, Number(b.duration), b.format || "In-person", b.notes || ""]
+  );
+  for (const tm of teamMembers) {
+    await query(`INSERT INTO team_members (id, booking_id, name) VALUES ($1,$2,$3)`, [uid(), id, String(tm.name || tm).trim()]);
+  }
+  const { rows } = await query(`SELECT * FROM bookings WHERE id = $1`, [id]);
+  json(res, 200, { booking: await serializeBooking(rows[0]) });
+});
+
+route("PATCH", /^\/api\/bookings\/([^/]+)$/, async (req, res, [, id]) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  const { rows: [b] } = await query(`SELECT * FROM bookings WHERE id = $1`, [id]);
+  if (!b) return json(res, 404, { error: "Not found" });
+
+  const body = await readBody(req);
+  const updates = [];
+  const values = [];
+  let i = 1;
+  if (body.status && ["Scheduled","Completed","Cancelled","Postponed"].includes(body.status)) {
+    updates.push(`status = $${i++}`); values.push(body.status);
+    if (body.status === "Completed") { updates.push(`completed_at = NOW()`); }
+    if (body.status === "Cancelled") { updates.push(`cancelled_at = NOW()`); }
+    if (body.status === "Scheduled") { updates.push(`completed_at = NULL`, `cancelled_at = NULL`, `postponed_to = NULL`, `postponed_time = NULL`); }
+  }
+  if (body.postponedTo !== undefined) { updates.push(`postponed_to = $${i++}`); values.push(body.postponedTo || null); }
+  if (body.postponedTime !== undefined) { updates.push(`postponed_time = $${i++}`); values.push(body.postponedTime || null); }
+  if (updates.length === 0) return json(res, 400, { error: "Nothing to update." });
+
+  values.push(id);
+  await query(`UPDATE bookings SET ${updates.join(", ")} WHERE id = $${i}`, values);
+  const { rows: [updated] } = await query(`SELECT * FROM bookings WHERE id = $1`, [id]);
+  json(res, 200, { booking: await serializeBooking(updated) });
+});
+
+route("DELETE", /^\/api\/bookings\/([^/]+)$/, async (req, res, [, id]) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  await query(`DELETE FROM bookings WHERE id = $1`, [id]);
+  json(res, 200, { ok: true });
+});
+
+route("POST", /^\/api\/bookings\/([^/]+)\/notes$/, async (req, res, [, id]) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  const { text = "" } = await readBody(req);
+  if (!text.trim()) return json(res, 400, { error: "Empty note." });
+  const nid = uid();
+  await query(`INSERT INTO study_notes (id, booking_id, text) VALUES ($1,$2,$3)`, [nid, id, text.trim()]);
+  const { rows: [booking] } = await query(`SELECT * FROM bookings WHERE id = $1`, [id]);
+  json(res, 200, { booking: await serializeBooking(booking) });
+});
+
+route("DELETE", /^\/api\/bookings\/([^/]+)\/notes\/([^/]+)$/, async (req, res, [, bid, nid]) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  await query(`DELETE FROM study_notes WHERE id = $1 AND booking_id = $2`, [nid, bid]);
+  const { rows: [booking] } = await query(`SELECT * FROM bookings WHERE id = $1`, [bid]);
+  json(res, 200, { booking: booking ? await serializeBooking(booking) : null });
+});
+
+route("POST", /^\/api\/bookings\/([^/]+)\/materials$/, async (req, res, [, id]) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  const { name, size, type, data } = await readBody(req);
+  if (!name || !data) return json(res, 400, { error: "Missing file data." });
+  const mid = uid();
+  await query(
+    `INSERT INTO materials (id, booking_id, name, size, mime, data) VALUES ($1,$2,$3,$4,$5,$6)`,
+    [mid, id, name, Number(size) || 0, type || null, data]
+  );
+  const { rows: [booking] } = await query(`SELECT * FROM bookings WHERE id = $1`, [id]);
+  json(res, 200, { booking: await serializeBooking(booking) });
+});
+
+route("DELETE", /^\/api\/bookings\/([^/]+)\/materials\/([^/]+)$/, async (req, res, [, bid, mid]) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  await query(`DELETE FROM materials WHERE id = $1 AND booking_id = $2`, [mid, bid]);
+  const { rows: [booking] } = await query(`SELECT * FROM bookings WHERE id = $1`, [bid]);
+  json(res, 200, { booking: booking ? await serializeBooking(booking) : null });
+});
+
+route("POST", /^\/api\/bookings\/([^/]+)\/team$/, async (req, res, [, id]) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  const { name = "" } = await readBody(req);
+  if (!name.trim()) return json(res, 400, { error: "Empty name." });
+  const mid = uid();
+  await query(`INSERT INTO team_members (id, booking_id, name) VALUES ($1,$2,$3)`, [mid, id, name.trim()]);
+  await query(`UPDATE bookings SET attendees = (SELECT COUNT(*) FROM team_members WHERE booking_id = $1) WHERE id = $1`, [id]);
+  const { rows: [booking] } = await query(`SELECT * FROM bookings WHERE id = $1`, [id]);
+  json(res, 200, { booking: await serializeBooking(booking) });
+});
+
+route("DELETE", /^\/api\/bookings\/([^/]+)\/team\/([^/]+)$/, async (req, res, [, bid, mid]) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  await query(`DELETE FROM team_members WHERE id = $1 AND booking_id = $2`, [mid, bid]);
+  await query(`UPDATE bookings SET attendees = GREATEST(1, (SELECT COUNT(*) FROM team_members WHERE booking_id = $1)) WHERE id = $1`, [bid]);
+  const { rows: [booking] } = await query(`SELECT * FROM bookings WHERE id = $1`, [bid]);
+  json(res, 200, { booking: booking ? await serializeBooking(booking) : null });
+});
+
+/* ----- Static files ----- */
+function serveStatic(req, res) {
+  const urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
+  let rel = urlPath === "/" ? "/index.html" : urlPath;
+  const filePath = path.normalize(path.join(ROOT, rel));
+  if (!filePath.startsWith(ROOT)) { res.writeHead(403); return res.end("Forbidden"); }
+  fs.stat(filePath, (err, stat) => {
+    if (err || !stat.isFile()) {
+      const fallback = path.join(ROOT, "index.html");
+      return fs.readFile(fallback, (e, buf) => {
+        if (e) { res.writeHead(404); return res.end("Not found"); }
+        res.writeHead(200, { "Content-Type": MIME[".html"] });
+        res.end(buf);
+      });
+    }
+    const ext = path.extname(filePath).toLowerCase();
+    res.writeHead(200, {
+      "Content-Type": MIME[ext] || "application/octet-stream",
+      "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=3600"
+    });
+    fs.createReadStream(filePath).pipe(res);
+  });
+}
+
+/* ----- Main handler ----- */
+const server = http.createServer(async (req, res) => {
+  try {
+    if (req.url.startsWith("/api/")) {
+      for (const r of routes) {
+        if (r.method !== req.method) continue;
+        const m = req.url.split("?")[0].match(r.pattern);
+        if (m) { await r.handler(req, res, m); return; }
+      }
+      return json(res, 404, { error: "Not found" });
+    }
+    serveStatic(req, res);
+  } catch (err) {
+    console.error("Request error:", err);
+    if (!res.headersSent) json(res, 500, { error: "Internal error" });
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`GPL VPMO training app listening on :${PORT}`);
-});
+/* ----- Boot ----- */
+(async () => {
+  try {
+    if (process.env.DATABASE_URL) {
+      await migrate();
+    } else {
+      console.warn("DATABASE_URL not set — starting without DB (API will 500).");
+    }
+  } catch (e) {
+    console.error("Migration failed:", e);
+  }
+  server.listen(PORT, () => console.log(`GPL VPMO training listening on :${PORT}`));
+})();

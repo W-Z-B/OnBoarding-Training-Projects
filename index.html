@@ -1003,107 +1003,260 @@
   <div class="drawer-body" id="drawerBody"></div>
 </aside>
 
-<footer>GPL · VPMO Training Scheduler · Data stored locally in your browser</footer>
+
+<footer>GPL · VPMO Training Scheduler · Postgres-backed · © Guyana Power &amp; Light</footer>
 
 <script>
-  const STORAGE_KEY = "gpl.vpmo.bookings.v3";
-  const THEME_KEY = "gpl.vpmo.theme";
+  /* ====================================================================
+     GPL VPMO Training — API client (Postgres-backed)
+     All reads/writes flow through /api/* on the same origin.
+     ==================================================================== */
+
   const $ = (s) => document.querySelector(s);
+  const THEME_KEY = "gpl.vpmo.theme";
+  const VIEW_KEY = "gpl.vpmo.view";
+  const AUTH_KEY = "gpl.vpmo.trainerAuth";
 
   const LEVELS = {
-    "Level 1 — Foundational": { n: 1, cls: "level-1" },
+    "Level 1 — Foundational":    { n: 1, cls: "level-1" },
     "Level 2 — Core Onboarding": { n: 2, cls: "level-2" },
-    "Level 3 — Intermediate": { n: 3, cls: "level-3" },
-    "Level 4 — Advanced": { n: 4, cls: "level-4" },
+    "Level 3 — Intermediate":    { n: 3, cls: "level-3" },
+    "Level 4 — Advanced":        { n: 4, cls: "level-4" },
     "Level 5 — Train the Trainer": { n: 5, cls: "level-5" }
   };
   const levelInfo = (l) => LEVELS[l] || { n: 0, cls: "" };
 
-  const today = new Date();
-  let viewYear = today.getFullYear();
-  let viewMonth = today.getMonth();
-  let selectedDate = toISO(today);
-  let activeUserId = null;
-  let pendingTeam = []; // names typed before form submit
+  const state = {
+    user: null,
+    bookings: [],
+    scope: "mine",      // mine | all
+    view: "trainee",
+    selectedDate: toISO(new Date()),
+    viewYear: new Date().getFullYear(),
+    viewMonth: new Date().getMonth(),
+    activeBookingId: null,
+    pendingTeam: []
+  };
 
-  // theme
+  /* ---------- helpers ---------- */
+  function toISO(d) { const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,"0"); const da=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${da}`; }
+  function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+  function validEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
+  function validPhone(s) { return /^[+\d][\d\s\-().]{5,}$/.test(s); }
+  function initials(name) { return String(name||"").trim().split(/\s+/).slice(0,2).map(s => s[0]?.toUpperCase() || "").join(""); }
+  function fmtBytes(n) { if (!n) return "0 B"; const u=["B","KB","MB","GB"]; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++;} return `${n.toFixed(i?1:0)} ${u[i]}`; }
+
+  /* ---------- API ---------- */
+  async function api(method, url, body) {
+    const opts = { method, credentials: "include", headers: {} };
+    if (body !== undefined) {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body);
+    }
+    const r = await fetch(url, opts);
+    let data = null;
+    try { data = await r.json(); } catch {}
+    if (!r.ok) throw new Error((data && data.error) || r.statusText || "Request failed");
+    return data;
+  }
+
+  async function refreshBookings() {
+    if (!state.user) { state.bookings = []; return; }
+    try {
+      const { bookings } = await api("GET", `/api/bookings?scope=${state.scope}`);
+      state.bookings = bookings || [];
+    } catch (e) {
+      console.error(e);
+      state.bookings = [];
+    }
+  }
+
+  /* ---------- Theme ---------- */
   (function initTheme() {
-    const saved = localStorage.getItem(THEME_KEY);
-    if (saved === "dark") document.documentElement.setAttribute("data-theme", "dark");
+    if (localStorage.getItem(THEME_KEY) === "dark") document.documentElement.setAttribute("data-theme", "dark");
   })();
   $("#themeBtn").addEventListener("click", () => {
     const isDark = document.documentElement.getAttribute("data-theme") === "dark";
-    if (isDark) {
-      document.documentElement.removeAttribute("data-theme");
-      localStorage.setItem(THEME_KEY, "light");
-    } else {
-      document.documentElement.setAttribute("data-theme", "dark");
-      localStorage.setItem(THEME_KEY, "dark");
-    }
+    if (isDark) { document.documentElement.removeAttribute("data-theme"); localStorage.setItem(THEME_KEY, "light"); }
+    else { document.documentElement.setAttribute("data-theme", "dark"); localStorage.setItem(THEME_KEY, "dark"); }
   });
 
-  (function initDefaults() {
-    const iso = toISO(new Date());
-    $("#date").min = iso;
-    $("#date").value = iso;
-    $("#time").value = "10:00";
-  })();
-
-  function toISO(d) { const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,"0"); const da=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${da}`; }
-  function load() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
-  function save(list) { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); }
-  function escape(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
-  function validEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
-  function validPhone(s) { return /^[+\d][\d\s\-().]{5,}$/.test(s); }
-  function initials(name) { return name.trim().split(/\s+/).slice(0,2).map(s => s[0]?.toUpperCase() || "").join(""); }
-  function fmtBytes(n) { if(!n) return "0 B"; const u=["B","KB","MB","GB"]; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++;} return `${n.toFixed(i?1:0)} ${u[i]}`; }
-  function toMin(t) { const [h,m] = t.split(":").map(Number); return h*60+m; }
-  function slotsOverlap(a, b) {
-    if (a.date !== b.date) return false;
-    const aS = toMin(a.time), aE = aS + Number(a.duration);
-    const bS = toMin(b.time), bE = bS + Number(b.duration);
-    return aS < bE && bS < aE;
-  }
-
+  /* ---------- Toast / msg ---------- */
   function showMsg(text, kind) {
-    const msg = $("#msg");
+    const msg = $("#msg"); if (!msg) return;
     msg.className = "msg " + kind;
     msg.textContent = text;
     if (kind === "ok") setTimeout(() => { msg.className = "msg"; msg.textContent = ""; }, 3500);
   }
 
-  /* ----- Stats ----- */
+  /* ---------- Auth UI ---------- */
+  function showAuthErr(id, msg) { const el = $("#" + id); el.textContent = msg; el.classList.add("show"); }
+  function clearAuthErr(id) { const el = $("#" + id); el.textContent = ""; el.classList.remove("show"); }
+
+  document.querySelectorAll("[data-auth-tab]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.authTab;
+      document.querySelectorAll("[data-auth-tab]").forEach(b => b.classList.toggle("active", b === btn));
+      $("#loginForm").classList.toggle("active", tab === "login");
+      $("#signupForm").classList.toggle("active", tab === "signup");
+      clearAuthErr("loginErr"); clearAuthErr("signupErr");
+    });
+  });
+
+  $("#loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearAuthErr("loginErr");
+    const username = $("#loginUser").value.trim().toLowerCase();
+    const password = $("#loginPass").value;
+    if (!username || !password) return showAuthErr("loginErr", "Enter your username and password.");
+    try {
+      const { user } = await api("POST", "/api/auth/login", { username, password });
+      state.user = user;
+      $("#loginForm").reset();
+      await applyAuthedState();
+    } catch (err) {
+      showAuthErr("loginErr", err.message || "Login failed.");
+    }
+  });
+
+  $("#signupForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearAuthErr("signupErr");
+    const fullName = $("#signupName").value.trim();
+    const username = $("#signupUser").value.trim().toLowerCase();
+    const email = $("#signupEmail").value.trim();
+    const phone = $("#signupPhone").value.trim();
+    const unit = $("#signupUnit").value;
+    const password = $("#signupPass").value;
+
+    if (!fullName || fullName.split(/\s+/).length < 2) return showAuthErr("signupErr", "Please enter your real full name (first and last).");
+    if (/^(test|anon|asdf|none|foo|bar|n\/a|xxx)$/i.test(fullName.split(/\s+/)[0])) return showAuthErr("signupErr", "Please use your real full name.");
+    if (!/^[a-z0-9._-]{3,}$/i.test(username)) return showAuthErr("signupErr", "Username must be 3+ characters (letters, numbers, . _ -).");
+    if (!validEmail(email)) return showAuthErr("signupErr", "That email doesn't look right.");
+    if (!validPhone(phone)) return showAuthErr("signupErr", "That phone number looks invalid.");
+    if (!unit) return showAuthErr("signupErr", "Choose your unit.");
+    if (password.length < 6) return showAuthErr("signupErr", "Password must be at least 6 characters.");
+
+    try {
+      const { user } = await api("POST", "/api/auth/signup", { fullName, username, email, phone, unit, password });
+      state.user = user;
+      $("#signupForm").reset();
+      await applyAuthedState();
+    } catch (err) {
+      showAuthErr("signupErr", err.message || "Sign up failed.");
+    }
+  });
+
+  $("#logoutBtn").addEventListener("click", async () => {
+    try { await api("POST", "/api/auth/logout"); } catch {}
+    state.user = null;
+    state.bookings = [];
+    sessionStorage.removeItem(AUTH_KEY);
+    document.body.classList.add("view-trainee");
+    document.body.classList.remove("view-trainer");
+    await applyAuthedState();
+  });
+
+  async function applyAuthedState() {
+    document.body.classList.toggle("not-authed", !state.user);
+    if (state.user) {
+      // Populate hidden form fields + profile summary
+      const u = state.user;
+      $("#fullName").value = u.fullName;
+      $("#email").value = u.email;
+      $("#phone").value = u.phone;
+      $("#unit").value = u.unit;
+      $("#profileAvatar").textContent = initials(u.fullName);
+      $("#profileName").textContent = u.fullName;
+      $("#profileMeta").textContent = `${u.unit} · ${u.email} · ${u.phone}`;
+      // User chip
+      $("#userChip").style.display = "inline-flex";
+      $("#userChipAvatar").textContent = initials(u.fullName);
+      $("#userChipName").textContent = u.fullName;
+      await refreshBookings();
+    } else {
+      $("#userChip").style.display = "none";
+    }
+    renderAll();
+  }
+
+  /* ---------- View switching + trainer lock ---------- */
+  const isUnlocked = () => sessionStorage.getItem(AUTH_KEY) === "1";
+
+  async function applyView(v) {
+    state.view = v;
+    state.scope = v === "trainer" ? "all" : "mine";
+    document.body.classList.toggle("view-trainee", v === "trainee");
+    document.body.classList.toggle("view-trainer", v === "trainer");
+    document.querySelectorAll("[data-view-btn]").forEach(b => b.classList.toggle("active", b.dataset.viewBtn === v));
+    localStorage.setItem(VIEW_KEY, v);
+    await refreshBookings();
+    renderAll();
+  }
+
+  function openLock(onSuccess) {
+    $("#lockBackdrop").classList.add("open");
+    $("#lockErr").textContent = "";
+    const input = $("#lockInput");
+    input.value = "";
+    setTimeout(() => input.focus(), 50);
+
+    const submit = async () => {
+      try {
+        await api("POST", "/api/auth/trainer", { password: input.value });
+        sessionStorage.setItem(AUTH_KEY, "1");
+        $("#lockBackdrop").classList.remove("open");
+        onSuccess();
+      } catch (err) {
+        $("#lockErr").textContent = err.message || "Incorrect password.";
+        input.value = ""; input.focus();
+      }
+    };
+    $("#lockSubmit").onclick = submit;
+    input.onkeydown = (e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") closeLock(); };
+    $("#lockCancel").onclick = () => closeLock();
+  }
+  function closeLock() { $("#lockBackdrop").classList.remove("open"); applyView("trainee"); }
+  $("#lockBackdrop").addEventListener("click", (e) => { if (e.target.id === "lockBackdrop") closeLock(); });
+
+  function setView(v) {
+    if (!state.user) return;
+    if (v === "trainer" && !isUnlocked()) { openLock(() => applyView("trainer")); return; }
+    applyView(v);
+  }
+  document.querySelectorAll("[data-view-btn]").forEach(b => b.addEventListener("click", () => setView(b.dataset.viewBtn)));
+
+  /* ---------- Stats ---------- */
   function renderStats() {
-    const list = load();
+    const list = state.bookings;
     const todayISO = toISO(new Date());
     $("#statTotal").textContent = list.length;
-    $("#statUpcoming").textContent = list.filter(b => b.date >= todayISO).length;
-    $("#statUnits").textContent = new Set(list.map(b => b.unit.toLowerCase())).size;
+    $("#statUpcoming").textContent = list.filter(b => (b.date || "") >= todayISO).length;
+    $("#statUnits").textContent = new Set(list.map(b => (b.unit || "").toLowerCase())).size;
     $("#statPeople").textContent = list.reduce((s,b) => s + (Number(b.attendees)||1), 0);
   }
 
-  /* ----- Calendar ----- */
+  /* ---------- Calendar ---------- */
   (function buildDowRow() {
     const dows = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
     $("#dowRow").innerHTML = dows.map(d => `<div class="cal-dow">${d}</div>`).join("");
   })();
 
   function renderCalendar() {
-    const first = new Date(viewYear, viewMonth, 1);
+    const first = new Date(state.viewYear, state.viewMonth, 1);
     const startDow = first.getDay();
-    const daysInMonth = new Date(viewYear, viewMonth+1, 0).getDate();
+    const daysInMonth = new Date(state.viewYear, state.viewMonth+1, 0).getDate();
     $("#calTitle").textContent = first.toLocaleString(undefined, { month: "long", year: "numeric" });
 
-    const todayISO = toISO(today);
-    const bookings = load();
-    const byDate = bookings.reduce((m,b) => ((m[b.date]=m[b.date]||[]).push(b), m), {});
+    const todayISO = toISO(new Date());
+    const byDate = state.bookings.reduce((m,b) => ((m[b.date]=m[b.date]||[]).push(b), m), {});
 
     const cells = [];
     for (let i=0; i<startDow; i++) {
-      const d = new Date(viewYear, viewMonth, 1-(startDow-i));
+      const d = new Date(state.viewYear, state.viewMonth, 1-(startDow-i));
       cells.push({ date: d, other: true });
     }
-    for (let d=1; d<=daysInMonth; d++) cells.push({ date: new Date(viewYear, viewMonth, d), other: false });
+    for (let d=1; d<=daysInMonth; d++) cells.push({ date: new Date(state.viewYear, state.viewMonth, d), other: false });
     while (cells.length % 7 !== 0) {
       const last = cells[cells.length-1].date;
       const nd = new Date(last); nd.setDate(last.getDate()+1);
@@ -1115,24 +1268,24 @@
       const list = byDate[iso] || [];
       const dots = [...new Set(list.map(b => levelInfo(b.level).n))].sort()
         .slice(0,5).map(n => `<span class="cal-dot" style="background:var(--l${n})"></span>`).join("");
-      const classes = ["cal-day", c.other ? "other" : "", iso===todayISO ? "today" : "", iso===selectedDate ? "selected" : ""].filter(Boolean).join(" ");
+      const classes = ["cal-day", c.other ? "other" : "", iso===todayISO ? "today" : "", iso===state.selectedDate ? "selected" : ""].filter(Boolean).join(" ");
       const count = list.length ? `<div class="cal-count">${list.length} slot${list.length>1?"s":""}</div>` : "";
       return `<div class="${classes}" data-iso="${iso}"><div class="num">${c.date.getDate()}</div><div class="cal-dots">${dots}</div>${count}</div>`;
     }).join("");
 
     $("#calGrid").querySelectorAll(".cal-day").forEach(el => {
       el.addEventListener("click", () => {
-        selectedDate = el.dataset.iso;
-        $("#date").value = selectedDate;
+        state.selectedDate = el.dataset.iso;
+        $("#date").value = state.selectedDate;
         renderCalendar(); renderDay();
       });
     });
   }
 
   function renderDay() {
-    const d = new Date(selectedDate + "T00:00:00");
+    const d = new Date(state.selectedDate + "T00:00:00");
     $("#dayTitle").textContent = d.toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric" });
-    const list = load().filter(b => b.date === selectedDate).sort((a,b) => a.time.localeCompare(b.time));
+    const list = state.bookings.filter(b => b.date === state.selectedDate).sort((a,b) => a.time.localeCompare(b.time));
     $("#dayCount").textContent = list.length ? `${list.length} booking${list.length>1?"s":""}` : "";
     if (list.length === 0) {
       $("#dayList").innerHTML = `<div class="empty">
@@ -1146,39 +1299,37 @@
       return `<div class="slot fade-in is-${st}" data-id="${b.id}">
         <div class="time">${b.time}<small>${b.duration}m</small></div>
         <div>
-          <div class="who">${escape(b.fullName)} <span class="chip ${lv.cls}">L${lv.n}</span> <span class="chip status-${st}">${st}</span></div>
-          <div class="meta">${escape(b.unit)} · ${escape(b.format)} · ${Number(b.attendees)||1} attendees</div>
+          <div class="who">${escapeHtml(b.fullName)} <span class="chip ${lv.cls}">L${lv.n}</span> <span class="chip status-${st}">${st}</span></div>
+          <div class="meta">${escapeHtml(b.unit)} · ${escapeHtml(b.format)} · ${Number(b.attendees)||1} attendees</div>
         </div>
         <button class="btn ghost sm">Open</button>
       </div>`;
     }).join("");
-    $("#dayList").querySelectorAll(".slot").forEach(el => {
-      el.addEventListener("click", () => openDrawer(el.dataset.id));
-    });
+    $("#dayList").querySelectorAll(".slot").forEach(el => el.addEventListener("click", () => openDrawer(el.dataset.id)));
   }
 
-  $("#prevMonth").addEventListener("click", () => { viewMonth--; if (viewMonth<0){viewMonth=11;viewYear--;} renderCalendar(); });
-  $("#nextMonth").addEventListener("click", () => { viewMonth++; if (viewMonth>11){viewMonth=0;viewYear++;} renderCalendar(); });
+  $("#prevMonth").addEventListener("click", () => { state.viewMonth--; if (state.viewMonth<0){state.viewMonth=11;state.viewYear--;} renderCalendar(); });
+  $("#nextMonth").addEventListener("click", () => { state.viewMonth++; if (state.viewMonth>11){state.viewMonth=0;state.viewYear++;} renderCalendar(); });
   $("#todayBtn").addEventListener("click", () => {
-    viewYear = today.getFullYear(); viewMonth = today.getMonth();
-    selectedDate = toISO(today); $("#date").value = selectedDate;
+    const t = new Date();
+    state.viewYear = t.getFullYear(); state.viewMonth = t.getMonth();
+    state.selectedDate = toISO(t); $("#date").value = state.selectedDate;
     renderCalendar(); renderDay();
   });
 
-  /* ----- Table ----- */
+  /* ---------- Registrations table ---------- */
   function renderTable() {
-    const list = load();
+    const wrap = $("#tableWrap"); if (!wrap) return;
     const q = ($("#filter").value || "").trim().toLowerCase();
     const lv = $("#levelFilter").value;
-    let filtered = list;
+    let filtered = state.bookings;
     if (q) filtered = filtered.filter(b => [b.fullName,b.email,b.unit,b.phone,b.level].join(" ").toLowerCase().includes(q));
     if (lv) filtered = filtered.filter(b => b.level === lv);
 
-    const wrap = $("#tableWrap");
     if (filtered.length === 0) {
       wrap.innerHTML = `<div class="empty">
         <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m22 11-3 3-3-3"/></svg>
-        ${list.length === 0 ? "No registrations yet. Fill out the form to create the first." : "No results match your filters."}
+        ${state.bookings.length === 0 ? "No registrations yet." : "No results match your filters."}
       </div>`;
       return;
     }
@@ -1199,15 +1350,15 @@
             <td><span class="chip ${lv.cls}">L${lv.n}</span></td>
             <td>
               <div style="display:flex; align-items:center; gap:10px;">
-                <div class="avatar" style="width:32px;height:32px;font-size:12px;border-radius:9px;">${escape(initials(b.fullName))}</div>
+                <div class="avatar" style="width:32px;height:32px;font-size:12px;border-radius:9px;">${escapeHtml(initials(b.fullName))}</div>
                 <div>
-                  <div style="font-weight:600; display:flex; align-items:center; gap:6px;">${escape(b.fullName)}${b.role === "UnitHead" ? `<span class="chip" style="background:var(--brand-soft); color:var(--brand);">Head · ${(b.teamMembers||[]).length}</span>` : ""}</div>
-                  <div style="color:var(--muted); font-size:12px;">${escape(b.format)}</div>
+                  <div style="font-weight:600; display:flex; align-items:center; gap:6px;">${escapeHtml(b.fullName)}${b.role === "UnitHead" ? `<span class="chip" style="background:var(--brand-soft); color:var(--brand);">Head · ${(b.teamMembers||[]).length}</span>` : ""}</div>
+                  <div style="color:var(--muted); font-size:12px;">${escapeHtml(b.format)}</div>
                 </div>
               </div>
             </td>
-            <td>${escape(b.unit)}</td>
-            <td><div style="font-size:12px;">${escape(b.email)}</div><div style="color:var(--muted); font-size:12px;">${escape(b.phone)}</div></td>
+            <td>${escapeHtml(b.unit)}</td>
+            <td><div style="font-size:12px;">${escapeHtml(b.email)}</div><div style="color:var(--muted); font-size:12px;">${escapeHtml(b.phone)}</div></td>
             <td>${Number(b.attendees)||1}</td>
             <td>${matCount ? `<span class="chip" style="background:var(--brand-soft); color:var(--brand);">${matCount} item${matCount>1?"s":""}</span>` : `<span style="color:var(--muted); font-size:12px;">None</span>`}</td>
           </tr>`;
@@ -1217,289 +1368,17 @@
     wrap.querySelectorAll("tr[data-id]").forEach(el => el.addEventListener("click", () => openDrawer(el.dataset.id)));
   }
 
-  /* ----- Drawer: user detail + materials + notes ----- */
-  function openDrawer(id) {
-    activeUserId = id;
-    const user = load().find(b => b.id === id);
-    if (!user) return;
-    const lv = levelInfo(user.level);
-    $("#drawerBody").innerHTML = `
-      <div class="user-head">
-        <div class="avatar">${escape(initials(user.fullName))}</div>
-        <div class="info">
-          <div class="name">${escape(user.fullName)} <span class="chip ${lv.cls}" style="margin-left:4px;">L${lv.n}</span></div>
-          <div class="sub">${escape(user.unit)} · ${escape(user.email)}</div>
-        </div>
-      </div>
-
-      <div class="section-title" style="margin-top:0;">Status</div>
-      <div class="status-picker" id="statusPicker" data-current="${user.status || 'Scheduled'}">
-        ${["Scheduled","Completed","Postponed","Cancelled"].map(s =>
-          `<button type="button" data-status="${s}" class="${(user.status || 'Scheduled') === s ? 'active-' + s : ''}">${s}</button>`
-        ).join("")}
-      </div>
-      <div id="postponeRow" style="display:${user.status === 'Postponed' ? 'flex' : 'none'}; gap:8px; margin-top:10px;">
-        <input type="date" id="postponeDate" value="${user.postponedTo || ''}" style="flex:1;" />
-        <input type="time" id="postponeTime" value="${user.postponedTime || user.time || ''}" style="flex:1;" />
-      </div>
-      ${user.completedAt ? `<p class="help" style="margin-top:8px;">Completed on ${new Date(user.completedAt).toLocaleString(undefined, { dateStyle:"medium", timeStyle:"short" })}</p>` : ""}
-      ${user.cancelledAt ? `<p class="help" style="margin-top:8px;">Cancelled on ${new Date(user.cancelledAt).toLocaleDateString(undefined, { dateStyle:"medium" })}</p>` : ""}
-
-      <dl class="kv" style="margin-top:18px;">
-        <dt>Role</dt><dd>${user.role === "UnitHead" ? `<span class="chip" style="background:var(--brand-soft); color:var(--brand);">Unit Head</span>` : "Member"}</dd>
-        <dt>Phone</dt><dd class="mono">${escape(user.phone)}</dd>
-        <dt>Scheduled</dt><dd>${user.date} at ${user.time} (${user.duration}m)${user.status === 'Postponed' && user.postponedTo ? ` → <strong>${user.postponedTo}${user.postponedTime ? ' at ' + user.postponedTime : ''}</strong>` : ''}</dd>
-        <dt>Format</dt><dd>${escape(user.format)}</dd>
-        <dt>Level</dt><dd>${escape(user.level)}</dd>
-        <dt>Attendees</dt><dd>${Number(user.attendees)||1}</dd>
-        ${user.notes ? `<dt>Notes</dt><dd>${escape(user.notes)}</dd>` : ""}
-      </dl>
-
-      ${user.role === "UnitHead" ? `
-        <div class="section-title">👥 Team Members Being Sent <span style="margin-left:auto; color:var(--muted); font-weight:500; text-transform:none; letter-spacing:0;">${(user.teamMembers||[]).length} total</span></div>
-        <div id="teamMembersList"></div>
-        <div style="display:flex; gap:8px; margin-top:8px;">
-          <input id="drawerMemberName" placeholder="Add another team member" />
-          <button class="btn sm" id="drawerAddMember" style="margin:0; padding:8px 14px; white-space:nowrap;">+ Add</button>
-        </div>
-      ` : ""}
-
-      <div class="section-title">📝 Study Notes</div>
-      <textarea id="newNote" rows="3" placeholder="Add a study note for this user (pre-reading, topics to cover, homework…)"></textarea>
-      <button class="btn sm" id="addNoteBtn" style="margin-top:8px; padding: 8px 14px;">Add note</button>
-      <div id="notesList" style="margin-top:14px;"></div>
-
-      <div class="section-title">📎 Study Materials</div>
-      <label class="upload-zone" id="uploadZone">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        <div><strong style="color:var(--text);">Click to upload</strong> or drag &amp; drop</div>
-        <div style="margin-top:4px; font-size:11px;">PDF, DOCX, PPTX, images — up to 4 MB each</div>
-        <input type="file" id="fileInput" multiple />
-      </label>
-      <div id="matList" style="margin-top:14px;"></div>
-
-      <div style="display:flex; gap:8px; margin-top:22px; padding-top:16px; border-top:1px solid var(--border);">
-        <button class="btn ghost" id="downloadZip" style="flex:1;">Export user data</button>
-        <button class="btn danger" id="removeUser" style="flex:1;">Remove booking</button>
-      </div>
-    `;
-    renderDrawerLists();
-    attachDrawerEvents();
-    $("#drawer").classList.add("open");
-    $("#drawer").setAttribute("aria-hidden", "false");
-    $("#drawerBackdrop").classList.add("open");
-  }
-
-  function closeDrawer() {
-    activeUserId = null;
-    $("#drawer").classList.remove("open");
-    $("#drawer").setAttribute("aria-hidden", "true");
-    $("#drawerBackdrop").classList.remove("open");
-  }
-  $("#closeDrawer").addEventListener("click", closeDrawer);
-  $("#drawerBackdrop").addEventListener("click", closeDrawer);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
-
-  function renderDrawerLists() {
-    const user = load().find(b => b.id === activeUserId);
-    if (!user) return;
-    const notes = user.studyNotes || [];
-    const mats = user.materials || [];
-
-    if (user.role === "UnitHead" && $("#teamMembersList")) {
-      const team = user.teamMembers || [];
-      $("#teamMembersList").innerHTML = team.length === 0
-        ? `<div class="empty" style="padding:14px; font-size:12px;">No team members listed yet.</div>`
-        : team.map(m => `
-          <div class="material-item fade-in" style="margin-bottom:6px;">
-            <div class="file-icon" style="background:var(--brand-soft); color:var(--brand); font-weight:700; font-size:11px;">${escape(initials(m.name))}</div>
-            <div class="fname">${escape(m.name)}</div>
-            <button class="fdelete" data-team-id="${m.id}" title="Remove">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-            </button>
-          </div>`).join("");
-
-      $("#teamMembersList").querySelectorAll("[data-team-id]").forEach(b => b.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const list = load();
-        const u = list.find(x => x.id === activeUserId);
-        u.teamMembers = (u.teamMembers || []).filter(m => m.id !== b.dataset.teamId);
-        u.attendees = u.teamMembers.length;
-        save(list); renderAll(); renderDrawerLists();
-      }));
-
-      const addBtn = $("#drawerAddMember");
-      const addInput = $("#drawerMemberName");
-      const addMember = () => {
-        const name = addInput.value.trim();
-        if (!name) return;
-        const list = load();
-        const u = list.find(x => x.id === activeUserId);
-        u.teamMembers = u.teamMembers || [];
-        if (u.teamMembers.some(m => m.name.toLowerCase() === name.toLowerCase())) return;
-        u.teamMembers.push({
-          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()),
-          name
-        });
-        u.attendees = u.teamMembers.length;
-        save(list); addInput.value = ""; addInput.focus();
-        renderAll(); renderDrawerLists();
-      };
-      addBtn.onclick = addMember;
-      addInput.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); addMember(); } };
-    }
-
-    $("#notesList").innerHTML = notes.length === 0
-      ? `<div class="empty" style="padding:16px;">No notes yet.</div>`
-      : notes.map(n => `
-        <div class="note-item fade-in">
-          <div class="note-date">
-            <span>${new Date(n.createdAt).toLocaleString(undefined, { dateStyle:"medium", timeStyle:"short" })}</span>
-            <button class="fdelete" data-note-id="${n.id}" title="Delete note" style="border:0;background:transparent;cursor:pointer;color:var(--muted);">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            </button>
-          </div>
-          <div class="note-body">${escape(n.text)}</div>
-        </div>`).join("");
-
-    $("#matList").innerHTML = mats.length === 0 ? "" : mats.map(m => `
-      <div class="material-item fade-in">
-        <div class="file-icon">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        </div>
-        <div class="fname" title="${escape(m.name)}">${escape(m.name)}</div>
-        <div class="fsize">${fmtBytes(m.size)}</div>
-        <a href="${m.data}" download="${escape(m.name)}" class="fdelete" title="Download" style="color:var(--brand);">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </a>
-        <button class="fdelete" data-mat-id="${m.id}" title="Remove">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
-      </div>`).join("");
-
-    $("#notesList").querySelectorAll("[data-note-id]").forEach(b => b.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const list = load();
-      const u = list.find(x => x.id === activeUserId);
-      u.studyNotes = (u.studyNotes || []).filter(n => n.id !== b.dataset.noteId);
-      save(list); renderAll(); renderDrawerLists();
-    }));
-    $("#matList").querySelectorAll("[data-mat-id]").forEach(b => b.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const list = load();
-      const u = list.find(x => x.id === activeUserId);
-      u.materials = (u.materials || []).filter(m => m.id !== b.dataset.matId);
-      save(list); renderAll(); renderDrawerLists();
-    }));
-  }
-
-  function attachDrawerEvents() {
-    $("#statusPicker")?.querySelectorAll("[data-status]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const status = btn.dataset.status;
-        const list = load();
-        const u = list.find(x => x.id === activeUserId);
-        u.status = status;
-        if (status === "Completed") u.completedAt = new Date().toISOString();
-        if (status === "Cancelled") u.cancelledAt = new Date().toISOString();
-        if (status === "Scheduled") { delete u.completedAt; delete u.cancelledAt; delete u.postponedTo; delete u.postponedTime; }
-        save(list);
-        renderAll();
-        openDrawer(activeUserId);
-      });
-    });
-    ["postponeDate","postponeTime"].forEach(id => {
-      $("#" + id)?.addEventListener("change", () => {
-        const list = load();
-        const u = list.find(x => x.id === activeUserId);
-        u.postponedTo = $("#postponeDate").value;
-        u.postponedTime = $("#postponeTime").value;
-        save(list); renderAll();
-      });
-    });
-
-    $("#addNoteBtn").addEventListener("click", () => {
-      const text = $("#newNote").value.trim();
-      if (!text) return;
-      const list = load();
-      const u = list.find(x => x.id === activeUserId);
-      u.studyNotes = u.studyNotes || [];
-      u.studyNotes.unshift({
-        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()),
-        text, createdAt: new Date().toISOString()
-      });
-      save(list); $("#newNote").value = ""; renderAll(); renderDrawerLists();
-    });
-
-    const zone = $("#uploadZone");
-    const input = $("#fileInput");
-    input.addEventListener("change", (e) => handleFiles(e.target.files));
-    ["dragenter","dragover"].forEach(ev => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add("dragover"); }));
-    ["dragleave","drop"].forEach(ev => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove("dragover"); }));
-    zone.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
-
-    $("#removeUser").addEventListener("click", () => {
-      if (!confirm("Remove this booking and all attached notes/materials?")) return;
-      save(load().filter(b => b.id !== activeUserId));
-      closeDrawer(); renderAll();
-    });
-
-    $("#downloadZip").addEventListener("click", () => {
-      const user = load().find(b => b.id === activeUserId);
-      const json = JSON.stringify(user, null, 2);
-      const blob = new Blob([json], { type: "application/json" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `${user.fullName.replace(/\s+/g,"_")}-training.json`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
-  }
-
-  function handleFiles(fileList) {
-    const files = Array.from(fileList || []);
-    if (files.length === 0) return;
-    const list = load();
-    const u = list.find(x => x.id === activeUserId);
-    u.materials = u.materials || [];
-    const MAX = 4 * 1024 * 1024;
-    let pending = files.length;
-    files.forEach(f => {
-      if (f.size > MAX) {
-        alert(`${f.name} is larger than 4 MB — skipped.`);
-        if (--pending === 0) { save(list); renderAll(); renderDrawerLists(); }
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        u.materials.push({
-          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()),
-          name: f.name, size: f.size, type: f.type,
-          data: reader.result, uploadedAt: new Date().toISOString()
-        });
-        if (--pending === 0) { save(list); renderAll(); renderDrawerLists(); }
-      };
-      reader.readAsDataURL(f);
-    });
-  }
-
-  /* ----- Render all ----- */
-  /* ----- My Bookings (trainee) ----- */
+  /* ---------- My Bookings (trainee) ---------- */
   function renderMyBookings() {
-    const wrap = $("#myBookingsList");
-    if (!wrap) return;
-    const email = ($("#email")?.value || localStorage.getItem("gpl.vpmo.lastEmail") || "").toLowerCase();
-    const list = load();
-    const mine = email ? list.filter(b => b.email.toLowerCase() === email) : list;
-    mine.sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
-    if (mine.length === 0) {
+    const wrap = $("#myBookingsList"); if (!wrap) return;
+    const list = state.bookings.slice().sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
+    if (list.length === 0) {
       wrap.innerHTML = `<div class="empty">
         <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-        ${email ? "You have no bookings yet." : "Register above to see your bookings here."}
-      </div>`;
+        Register above to see your bookings here.</div>`;
       return;
     }
-    wrap.innerHTML = mine.map(b => {
+    wrap.innerHTML = list.map(b => {
       const lv = levelInfo(b.level);
       const st = b.status || "Scheduled";
       const d = new Date(b.date + "T00:00:00");
@@ -1507,8 +1386,8 @@
       return `<div class="my-slot fade-in is-${st}" data-id="${b.id}">
         <div class="date-box"><div class="m">${mon}</div><div class="d">${d.getDate()}</div></div>
         <div>
-          <div style="font-weight:600; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">${escape(b.level)} <span class="chip ${lv.cls}">L${lv.n}</span> <span class="chip status-${st}">${st}</span></div>
-          <div style="color:var(--muted); font-size:12px; margin-top:2px;">${b.time} · ${b.duration}m · ${escape(b.format)} · ${escape(b.unit)}</div>
+          <div style="font-weight:600; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">${escapeHtml(b.level)} <span class="chip ${lv.cls}">L${lv.n}</span> <span class="chip status-${st}">${st}</span></div>
+          <div style="color:var(--muted); font-size:12px; margin-top:2px;">${b.time} · ${b.duration}m · ${escapeHtml(b.format)} · ${escapeHtml(b.unit)}</div>
         </div>
         <button class="btn ghost sm">Open</button>
       </div>`;
@@ -1516,23 +1395,22 @@
     wrap.querySelectorAll(".my-slot").forEach(el => el.addEventListener("click", () => openDrawer(el.dataset.id)));
   }
 
-  /* ----- Progress tracker ----- */
+  /* ---------- Progress ---------- */
   function renderProgress() {
-    const list = load();
     const peopleWrap = $("#progressPeople");
     const unitsWrap = $("#progressUnits");
     if (!peopleWrap || !unitsWrap) return;
 
     const groupBy = (key) => {
       const map = {};
-      list.forEach(b => {
+      state.bookings.forEach(b => {
         const k = typeof key === "function" ? key(b) : b[key];
         if (!k) return;
         if (!map[k]) map[k] = { key: k, sample: b, total: 0, Completed: 0, Scheduled: 0, Postponed: 0, Cancelled: 0, people: new Set(), units: new Set() };
         const st = b.status || "Scheduled";
         map[k].total++;
         map[k][st] = (map[k][st] || 0) + 1;
-        map[k].people.add(b.email.toLowerCase());
+        map[k].people.add((b.email||"").toLowerCase());
         map[k].units.add(b.unit);
       });
       return Object.values(map);
@@ -1551,8 +1429,8 @@
       return `<div class="progress-row fade-in">
         <div class="prow-head">
           <div>
-            <div class="prow-name">${escape(label)}</div>
-            <div class="prow-meta">${escape(sub)}</div>
+            <div class="prow-name">${escapeHtml(label)}</div>
+            <div class="prow-meta">${escapeHtml(sub)}</div>
           </div>
           <div style="text-align:right;">
             <div style="font-weight:700; font-size:14px;">${pct}%</div>
@@ -1570,7 +1448,7 @@
       </div>`;
     };
 
-    const peopleGroups = groupBy(b => b.email.toLowerCase())
+    const peopleGroups = groupBy(b => (b.email||"").toLowerCase())
       .sort((a,b) => (b.Completed/b.total||0) - (a.Completed/a.total||0) || b.total - a.total);
     const unitGroups = groupBy("unit")
       .sort((a,b) => (b.Completed/b.total||0) - (a.Completed/a.total||0));
@@ -1584,214 +1462,33 @@
       : unitGroups.map(g => renderRow(g.key, `${g.people.size} ${g.people.size === 1 ? "person" : "people"}`, g)).join("");
   }
 
-  function renderAll() { renderStats(); renderCalendar(); renderDay(); renderTable(); renderMyBookings(); renderProgress(); }
-
-  /* ----- Auth (signup / login) ----- */
-  const USERS_KEY = "gpl.vpmo.users";
-  const CURRENT_USER_KEY = "gpl.vpmo.currentUser";
-
-  function loadUsers() { try { return JSON.parse(localStorage.getItem(USERS_KEY)) || []; } catch { return []; } }
-  function saveUsers(u) { localStorage.setItem(USERS_KEY, JSON.stringify(u)); }
-  async function hash(s) {
-    const data = new TextEncoder().encode(s);
-    const buf = await crypto.subtle.digest("SHA-256", data);
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+  function renderAll() {
+    renderStats(); renderCalendar(); renderDay(); renderTable(); renderMyBookings(); renderProgress();
   }
 
-  function currentUser() {
-    const u = localStorage.getItem(CURRENT_USER_KEY);
-    if (!u) return null;
-    return loadUsers().find(x => x.username === u) || null;
-  }
+  /* ---------- Booking form (trainee) ---------- */
+  (function initDateDefault() {
+    const iso = toISO(new Date());
+    $("#date").min = iso; $("#date").value = iso;
+    $("#time").value = "10:00";
+  })();
 
-  function renderUserChip() {
-    const u = currentUser();
-    const chip = $("#userChip");
-    if (u) {
-      chip.style.display = "inline-flex";
-      $("#userChipAvatar").textContent = initials(u.fullName);
-      $("#userChipName").textContent = u.fullName;
-    } else {
-      chip.style.display = "none";
-    }
-  }
-
-  function applyAuthedState() {
-    const u = currentUser();
-    document.body.classList.toggle("not-authed", !u);
-    if (u) {
-      // Populate hidden fields — profile is source of truth, no re-entry needed
-      if ($("#fullName")) $("#fullName").value = u.fullName;
-      if ($("#email")) $("#email").value = u.email;
-      if ($("#phone")) $("#phone").value = u.phone;
-      if ($("#unit")) $("#unit").value = u.unit;
-      // Profile summary card
-      if ($("#profileAvatar")) $("#profileAvatar").textContent = initials(u.fullName);
-      if ($("#profileName")) $("#profileName").textContent = u.fullName;
-      if ($("#profileMeta")) $("#profileMeta").textContent = `${u.unit} · ${u.email} · ${u.phone}`;
-      localStorage.setItem("gpl.vpmo.lastEmail", u.email.toLowerCase());
-    }
-    renderUserChip();
-    renderAll();
-  }
-
-  function showAuthErr(id, msg) {
-    const el = $("#" + id);
-    el.textContent = msg;
-    el.classList.add("show");
-  }
-  function clearAuthErr(id) {
-    const el = $("#" + id);
-    el.textContent = ""; el.classList.remove("show");
-  }
-
-  document.querySelectorAll("[data-auth-tab]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const tab = btn.dataset.authTab;
-      document.querySelectorAll("[data-auth-tab]").forEach(b => b.classList.toggle("active", b === btn));
-      $("#loginForm").classList.toggle("active", tab === "login");
-      $("#signupForm").classList.toggle("active", tab === "signup");
-      clearAuthErr("loginErr"); clearAuthErr("signupErr");
-    });
-  });
-
-  $("#loginForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    clearAuthErr("loginErr");
-    const username = $("#loginUser").value.trim().toLowerCase();
-    const password = $("#loginPass").value;
-    if (!username || !password) return showAuthErr("loginErr", "Enter your username and password.");
-    const users = loadUsers();
-    const user = users.find(u => u.username === username);
-    if (!user) return showAuthErr("loginErr", "No account found with that username.");
-    const ph = await hash(password + "::" + user.salt);
-    if (ph !== user.passwordHash) return showAuthErr("loginErr", "Wrong password. Try again.");
-    localStorage.setItem(CURRENT_USER_KEY, user.username);
-    $("#loginForm").reset();
-    applyAuthedState();
-  });
-
-  $("#signupForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    clearAuthErr("signupErr");
-    const fullName = $("#signupName").value.trim();
-    const username = $("#signupUser").value.trim().toLowerCase();
-    const email = $("#signupEmail").value.trim();
-    const phone = $("#signupPhone").value.trim();
-    const unit = $("#signupUnit").value;
-    const password = $("#signupPass").value;
-
-    if (!fullName || fullName.split(/\s+/).length < 2) return showAuthErr("signupErr", "Please enter your real full name (first and last).");
-    if (/^(test|anon|asdf|none|foo|bar|n\/a|xxx)$/i.test(fullName.split(/\s+/)[0])) return showAuthErr("signupErr", "Please use your real full name — training records use this name.");
-    if (!/^[a-z0-9._-]{3,}$/i.test(username)) return showAuthErr("signupErr", "Username must be 3+ characters (letters, numbers, . _ -).");
-    if (!validEmail(email)) return showAuthErr("signupErr", "That email doesn't look right.");
-    if (!validPhone(phone)) return showAuthErr("signupErr", "That phone number looks invalid.");
-    if (!unit) return showAuthErr("signupErr", "Choose your unit.");
-    if (password.length < 6) return showAuthErr("signupErr", "Password must be at least 6 characters.");
-
-    const users = loadUsers();
-    if (users.some(u => u.username === username)) return showAuthErr("signupErr", "That username is taken — try another.");
-    if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) return showAuthErr("signupErr", "An account already exists with that email.");
-
-    const salt = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random());
-    const passwordHash = await hash(password + "::" + salt);
-    users.push({ username, fullName, email, phone, unit, salt, passwordHash, createdAt: new Date().toISOString() });
-    saveUsers(users);
-    localStorage.setItem(CURRENT_USER_KEY, username);
-    $("#signupForm").reset();
-    applyAuthedState();
-  });
-
-  $("#logoutBtn").addEventListener("click", () => {
-    localStorage.removeItem(CURRENT_USER_KEY);
-    sessionStorage.removeItem("gpl.vpmo.trainerAuth");
-    document.body.classList.remove("view-trainer");
-    document.body.classList.add("view-trainee");
-    applyAuthedState();
-  });
-
-  /* ----- Trainer password gate ----- */
-  const TRAINER_PASSWORD = "vpmo2026"; // change here to rotate
-  const AUTH_KEY = "gpl.vpmo.trainerAuth";
-  const isUnlocked = () => sessionStorage.getItem(AUTH_KEY) === "1";
-
-  function applyView(v) {
-    document.body.classList.toggle("view-trainee", v === "trainee");
-    document.body.classList.toggle("view-trainer", v === "trainer");
-    document.querySelectorAll("[data-view-btn]").forEach(b => b.classList.toggle("active", b.dataset.viewBtn === v));
-    localStorage.setItem("gpl.vpmo.view", v);
-    renderAll();
-  }
-
-  function openLock(onSuccess) {
-    $("#lockBackdrop").classList.add("open");
-    $("#lockErr").textContent = "";
-    const input = $("#lockInput");
-    input.value = "";
-    setTimeout(() => input.focus(), 50);
-
-    const submit = () => {
-      if (input.value === TRAINER_PASSWORD) {
-        sessionStorage.setItem(AUTH_KEY, "1");
-        $("#lockBackdrop").classList.remove("open");
-        onSuccess();
-      } else {
-        $("#lockErr").textContent = "Incorrect password.";
-        input.value = "";
-        input.focus();
-      }
-    };
-    $("#lockSubmit").onclick = submit;
-    input.onkeydown = (e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") closeLock(); };
-    $("#lockCancel").onclick = () => closeLock();
-  }
-  function closeLock() {
-    $("#lockBackdrop").classList.remove("open");
-    applyView("trainee");
-  }
-  $("#lockBackdrop").addEventListener("click", (e) => { if (e.target.id === "lockBackdrop") closeLock(); });
-
-  /* ----- View switching ----- */
-  function setView(v) {
-    if (v === "trainer" && !isUnlocked()) {
-      openLock(() => applyView("trainer"));
-      return;
-    }
-    applyView(v);
-  }
-  document.querySelectorAll("[data-view-btn]").forEach(b => b.addEventListener("click", () => setView(b.dataset.viewBtn)));
-
-  // On load: never auto-enter trainer view without a fresh unlock
-  const savedView = localStorage.getItem("gpl.vpmo.view") || "trainee";
-  applyView(savedView === "trainer" && !isUnlocked() ? "trainee" : savedView);
-
-  // Apply auth state on boot (shows login screen if no current user)
-  applyAuthedState();
-
-  $("#email")?.addEventListener("input", () => {
-    localStorage.setItem("gpl.vpmo.lastEmail", $("#email").value.trim().toLowerCase());
-    renderMyBookings();
-  });
-
-  /* ----- Unit head team UI ----- */
   function renderPendingTeam() {
     const wrap = $("#teamList");
-    $("#teamCount").textContent = `${pendingTeam.length} ${pendingTeam.length === 1 ? "person" : "people"}`;
-    if (pendingTeam.length === 0) {
-      wrap.innerHTML = `<div class="empty" style="padding:14px; font-size:12px;">No team members added yet.</div>`;
-      return;
+    $("#teamCount").textContent = `${state.pendingTeam.length} ${state.pendingTeam.length === 1 ? "person" : "people"}`;
+    if (state.pendingTeam.length === 0) {
+      wrap.innerHTML = `<div class="empty" style="padding:14px; font-size:12px;">No team members added yet.</div>`; return;
     }
-    wrap.innerHTML = pendingTeam.map((name, i) => `
+    wrap.innerHTML = state.pendingTeam.map((name, i) => `
       <div class="material-item fade-in" style="margin-bottom:6px;">
-        <div class="file-icon" style="background:var(--brand-soft); color:var(--brand); font-weight:700; font-size:11px;">${escape(initials(name))}</div>
-        <div class="fname">${escape(name)}</div>
+        <div class="file-icon" style="background:var(--brand-soft); color:var(--brand); font-weight:700; font-size:11px;">${escapeHtml(initials(name))}</div>
+        <div class="fname">${escapeHtml(name)}</div>
         <button type="button" class="fdelete" data-team-i="${i}" title="Remove">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
-      </div>
-    `).join("");
+      </div>`).join("");
     wrap.querySelectorAll("[data-team-i]").forEach(b => b.addEventListener("click", () => {
-      pendingTeam.splice(Number(b.dataset.teamI), 1);
+      state.pendingTeam.splice(Number(b.dataset.teamI), 1);
       renderPendingTeam();
     }));
   }
@@ -1807,98 +1504,359 @@
     const input = $("#newMemberName");
     const name = input.value.trim();
     if (!name) return;
-    if (pendingTeam.some(n => n.toLowerCase() === name.toLowerCase())) {
-      return showMsg(`${name} is already on the list.`, "err");
-    }
-    pendingTeam.push(name);
-    input.value = "";
-    input.focus();
+    if (state.pendingTeam.some(n => n.toLowerCase() === name.toLowerCase())) return showMsg(`${name} already listed.`, "err");
+    state.pendingTeam.push(name);
+    input.value = ""; input.focus();
     renderPendingTeam();
   });
-  $("#newMemberName").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); $("#addMemberBtn").click(); }
-  });
+  $("#newMemberName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#addMemberBtn").click(); } });
 
-  /* ----- Form submit ----- */
-  $("#regForm").addEventListener("submit", (e) => {
+  $("#regForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target).entries());
-    data.fullName = data.fullName.trim();
-    data.email = data.email.trim();
-    data.phone = data.phone.trim();
-    data.unit = data.unit.trim();
-    data.notes = (data.notes || "").trim();
+    if (!$("#confirmDevices").checked) return showMsg("Please confirm you will bring your work laptop and phone.", "err");
 
-    if (!data.fullName || !data.email || !data.phone || !data.unit || !data.date || !data.time || !data.level) {
-      return showMsg("Please fill every required field.", "err");
+    const payload = {
+      level: data.level,
+      role: data.role,
+      attendees: Number(data.attendees) || 1,
+      date: data.date,
+      time: data.time,
+      duration: Number(data.duration),
+      format: "In-person",
+      notes: data.notes || "",
+      teamMembers: data.role === "UnitHead" ? state.pendingTeam.map(name => ({ name })) : []
+    };
+
+    if (payload.role === "UnitHead" && payload.teamMembers.length === 0) return showMsg("Add at least one team member.", "err");
+
+    try {
+      const { booking } = await api("POST", "/api/bookings", payload);
+      state.pendingTeam = [];
+      e.target.reset();
+      $("#date").value = toISO(new Date());
+      $("#time").value = "10:00";
+      $("#attendees").value = 1;
+      $("#memberBlock").style.display = "";
+      $("#unitHeadBlock").style.display = "none";
+      // Refill hidden fields (reset wipes them)
+      if (state.user) {
+        $("#fullName").value = state.user.fullName;
+        $("#email").value = state.user.email;
+        $("#phone").value = state.user.phone;
+        $("#unit").value = state.user.unit;
+      }
+      renderPendingTeam();
+      await refreshBookings();
+      // Jump calendar to booked date
+      const d = new Date(booking.date + "T00:00:00");
+      state.viewYear = d.getFullYear(); state.viewMonth = d.getMonth();
+      state.selectedDate = booking.date;
+      showMsg(`Booked ${booking.level} on ${booking.date} at ${booking.time}.`, "ok");
+      renderAll();
+      setTimeout(() => openDrawer(booking.id), 200);
+    } catch (err) {
+      showMsg(err.message || "Could not save booking.", "err");
     }
-    if (!validEmail(data.email)) return showMsg("That email doesn't look right.", "err");
-    if (!validPhone(data.phone)) return showMsg("GPL phone number looks invalid.", "err");
-
-    const list = load();
-    const dup = list.find(b => b.email.toLowerCase() === data.email.toLowerCase() && b.date === data.date);
-    if (dup) return showMsg("That email already has a booking on this date.", "err");
-    const conflict = list.find(b => slotsOverlap(b, data));
-    if (conflict) return showMsg(`Time conflicts with ${conflict.fullName} at ${conflict.time}.`, "err");
-
-    data.id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random());
-    data.createdAt = new Date().toISOString();
-    data.studyNotes = [];
-    data.materials = [];
-
-    if (data.role === "UnitHead") {
-      if (pendingTeam.length === 0) return showMsg("Add at least one team member you're sending.", "err");
-      data.teamMembers = pendingTeam.map(name => ({
-        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()),
-        name
-      }));
-      data.attendees = pendingTeam.length;
-    } else {
-      data.teamMembers = [];
-    }
-
-    list.push(data); save(list);
-    pendingTeam = [];
-
-    const d = new Date(data.date + "T00:00:00");
-    viewYear = d.getFullYear(); viewMonth = d.getMonth();
-    selectedDate = data.date;
-
-    e.target.reset();
-    $("#date").value = toISO(new Date());
-    $("#time").value = "10:00";
-    $("#attendees").value = 1;
-    $("#memberBlock").style.display = "";
-    $("#unitHeadBlock").style.display = "none";
-    renderPendingTeam();
-    showMsg(`Booked ${data.level} on ${data.date} at ${data.time}. Click the row to attach notes or materials.`, "ok");
-    renderAll();
-    setTimeout(() => openDrawer(data.id), 200);
   });
 
+  /* ---------- Drawer (user details + notes + materials + team) ---------- */
+  function closeDrawer() {
+    state.activeBookingId = null;
+    $("#drawer").classList.remove("open");
+    $("#drawer").setAttribute("aria-hidden", "true");
+    $("#drawerBackdrop").classList.remove("open");
+  }
+  $("#closeDrawer").addEventListener("click", closeDrawer);
+  $("#drawerBackdrop").addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+
+  function openDrawer(id) {
+    state.activeBookingId = id;
+    const user = state.bookings.find(b => b.id === id);
+    if (!user) return;
+    const lv = levelInfo(user.level);
+    $("#drawerBody").innerHTML = `
+      <div class="user-head">
+        <div class="avatar">${escapeHtml(initials(user.fullName))}</div>
+        <div class="info">
+          <div class="name">${escapeHtml(user.fullName)} <span class="chip ${lv.cls}" style="margin-left:4px;">L${lv.n}</span></div>
+          <div class="sub">${escapeHtml(user.unit)} · ${escapeHtml(user.email)}</div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:0;">Status</div>
+      <div class="status-picker" id="statusPicker" data-current="${user.status || 'Scheduled'}">
+        ${["Scheduled","Completed","Postponed","Cancelled"].map(s =>
+          `<button type="button" data-status="${s}" class="${(user.status || 'Scheduled') === s ? 'active-' + s : ''}">${s}</button>`
+        ).join("")}
+      </div>
+      <div id="postponeRow" style="display:${user.status === 'Postponed' ? 'flex' : 'none'}; gap:8px; margin-top:10px;">
+        <input type="date" id="postponeDate" value="${user.postponedTo || ''}" style="flex:1;" />
+        <input type="time" id="postponeTime" value="${user.postponedTime || user.time || ''}" style="flex:1;" />
+      </div>
+      ${user.completedAt ? `<p class="help" style="margin-top:8px;">Completed on ${new Date(user.completedAt).toLocaleString(undefined, { dateStyle:"medium", timeStyle:"short" })}</p>` : ""}
+      ${user.cancelledAt ? `<p class="help" style="margin-top:8px;">Cancelled on ${new Date(user.cancelledAt).toLocaleDateString(undefined, { dateStyle:"medium" })}</p>` : ""}
+
+      <dl class="kv" style="margin-top:18px;">
+        <dt>Role</dt><dd>${user.role === "UnitHead" ? `<span class="chip" style="background:var(--brand-soft); color:var(--brand);">Unit Head</span>` : "Member"}</dd>
+        <dt>Phone</dt><dd class="mono">${escapeHtml(user.phone)}</dd>
+        <dt>Scheduled</dt><dd>${user.date} at ${user.time} (${user.duration}m)${user.status === 'Postponed' && user.postponedTo ? ` → <strong>${user.postponedTo}${user.postponedTime ? ' at ' + user.postponedTime : ''}</strong>` : ''}</dd>
+        <dt>Format</dt><dd>${escapeHtml(user.format)}</dd>
+        <dt>Level</dt><dd>${escapeHtml(user.level)}</dd>
+        <dt>Attendees</dt><dd>${Number(user.attendees)||1}</dd>
+        ${user.notes ? `<dt>Notes</dt><dd>${escapeHtml(user.notes)}</dd>` : ""}
+      </dl>
+
+      ${user.role === "UnitHead" ? `
+        <div class="section-title">👥 Team Members Being Sent <span style="margin-left:auto; color:var(--muted); font-weight:500; text-transform:none; letter-spacing:0;">${(user.teamMembers||[]).length} total</span></div>
+        <div id="teamMembersList"></div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <input id="drawerMemberName" placeholder="Add another team member" />
+          <button class="btn sm" id="drawerAddMember" style="margin:0; padding:8px 14px; white-space:nowrap;">+ Add</button>
+        </div>
+      ` : ""}
+
+      <div class="section-title">📝 Study Notes</div>
+      <textarea id="newNote" rows="3" placeholder="Add a study note (pre-reading, topics, homework…)"></textarea>
+      <button class="btn sm" id="addNoteBtn" style="margin-top:8px; padding: 8px 14px;">Add note</button>
+      <div id="notesList" style="margin-top:14px;"></div>
+
+      <div class="section-title">📎 Study Materials</div>
+      <label class="upload-zone" id="uploadZone">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div><strong style="color:var(--text);">Click to upload</strong> or drag &amp; drop</div>
+        <div style="margin-top:4px; font-size:11px;">PDF, DOCX, PPTX, images — up to 4 MB each</div>
+        <input type="file" id="fileInput" multiple />
+      </label>
+      <div id="matList" style="margin-top:14px;"></div>
+
+      <div style="display:flex; gap:8px; margin-top:22px; padding-top:16px; border-top:1px solid var(--border);">
+        <button class="btn ghost" id="exportUser" style="flex:1;">Export user data</button>
+        <button class="btn danger" id="removeUser" style="flex:1;">Remove booking</button>
+      </div>
+    `;
+    renderDrawerLists();
+    attachDrawerEvents();
+    $("#drawer").classList.add("open");
+    $("#drawer").setAttribute("aria-hidden", "false");
+    $("#drawerBackdrop").classList.add("open");
+  }
+
+  function renderDrawerLists() {
+    const user = state.bookings.find(b => b.id === state.activeBookingId);
+    if (!user) return;
+
+    if (user.role === "UnitHead" && $("#teamMembersList")) {
+      const team = user.teamMembers || [];
+      $("#teamMembersList").innerHTML = team.length === 0
+        ? `<div class="empty" style="padding:14px; font-size:12px;">No team members listed yet.</div>`
+        : team.map(m => `
+          <div class="material-item fade-in" style="margin-bottom:6px;">
+            <div class="file-icon" style="background:var(--brand-soft); color:var(--brand); font-weight:700; font-size:11px;">${escapeHtml(initials(m.name))}</div>
+            <div class="fname">${escapeHtml(m.name)}</div>
+            <button class="fdelete" data-team-id="${m.id}" title="Remove">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>`).join("");
+
+      $("#teamMembersList").querySelectorAll("[data-team-id]").forEach(b => b.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        try {
+          await api("DELETE", `/api/bookings/${state.activeBookingId}/team/${b.dataset.teamId}`);
+          await refreshBookings(); renderAll();
+          const u = state.bookings.find(x => x.id === state.activeBookingId);
+          if (u) openDrawer(state.activeBookingId);
+        } catch (err) { showMsg(err.message, "err"); }
+      }));
+    }
+
+    const notes = user.studyNotes || [];
+    const mats = user.materials || [];
+
+    $("#notesList").innerHTML = notes.length === 0
+      ? `<div class="empty" style="padding:16px;">No notes yet.</div>`
+      : notes.map(n => `
+        <div class="note-item fade-in">
+          <div class="note-date">
+            <span>${new Date(n.createdAt).toLocaleString(undefined, { dateStyle:"medium", timeStyle:"short" })}</span>
+            <button class="fdelete" data-note-id="${n.id}" title="Delete note" style="border:0;background:transparent;cursor:pointer;color:var(--muted);">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+          <div class="note-body">${escapeHtml(n.text)}</div>
+        </div>`).join("");
+
+    $("#matList").innerHTML = mats.length === 0 ? "" : mats.map(m => `
+      <div class="material-item fade-in">
+        <div class="file-icon">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div class="fname" title="${escapeHtml(m.name)}">${escapeHtml(m.name)}</div>
+        <div class="fsize">${fmtBytes(m.size)}</div>
+        <a href="${m.data}" download="${escapeHtml(m.name)}" class="fdelete" title="Download" style="color:var(--brand);">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+        <button class="fdelete" data-mat-id="${m.id}" title="Remove">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>`).join("");
+
+    $("#notesList").querySelectorAll("[data-note-id]").forEach(b => b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      try {
+        await api("DELETE", `/api/bookings/${state.activeBookingId}/notes/${b.dataset.noteId}`);
+        await refreshBookings(); renderAll(); openDrawer(state.activeBookingId);
+      } catch (err) { showMsg(err.message, "err"); }
+    }));
+    $("#matList").querySelectorAll("[data-mat-id]").forEach(b => b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      try {
+        await api("DELETE", `/api/bookings/${state.activeBookingId}/materials/${b.dataset.matId}`);
+        await refreshBookings(); renderAll(); openDrawer(state.activeBookingId);
+      } catch (err) { showMsg(err.message, "err"); }
+    }));
+  }
+
+  function attachDrawerEvents() {
+    $("#statusPicker")?.querySelectorAll("[data-status]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        try {
+          await api("PATCH", `/api/bookings/${state.activeBookingId}`, { status: btn.dataset.status });
+          await refreshBookings(); renderAll(); openDrawer(state.activeBookingId);
+        } catch (err) { showMsg(err.message, "err"); }
+      });
+    });
+    ["postponeDate","postponeTime"].forEach(id => {
+      $("#" + id)?.addEventListener("change", async () => {
+        try {
+          await api("PATCH", `/api/bookings/${state.activeBookingId}`, {
+            postponedTo: $("#postponeDate").value,
+            postponedTime: $("#postponeTime").value
+          });
+          await refreshBookings(); renderAll();
+        } catch (err) { showMsg(err.message, "err"); }
+      });
+    });
+
+    $("#addNoteBtn")?.addEventListener("click", async () => {
+      const text = $("#newNote").value.trim();
+      if (!text) return;
+      try {
+        await api("POST", `/api/bookings/${state.activeBookingId}/notes`, { text });
+        $("#newNote").value = "";
+        await refreshBookings(); renderAll(); openDrawer(state.activeBookingId);
+      } catch (err) { showMsg(err.message, "err"); }
+    });
+
+    const zone = $("#uploadZone");
+    const fileInput = $("#fileInput");
+    if (fileInput) fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
+    if (zone) {
+      ["dragenter","dragover"].forEach(ev => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add("dragover"); }));
+      ["dragleave","drop"].forEach(ev => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove("dragover"); }));
+      zone.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
+    }
+
+    $("#removeUser")?.addEventListener("click", async () => {
+      if (!confirm("Remove this booking and all attached notes/materials?")) return;
+      try {
+        await api("DELETE", `/api/bookings/${state.activeBookingId}`);
+        closeDrawer(); await refreshBookings(); renderAll();
+      } catch (err) { showMsg(err.message, "err"); }
+    });
+
+    $("#exportUser")?.addEventListener("click", () => {
+      const user = state.bookings.find(b => b.id === state.activeBookingId);
+      if (!user) return;
+      const json = JSON.stringify(user, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${user.fullName.replace(/\s+/g,"_")}-training.json`;
+      a.click(); URL.revokeObjectURL(a.href);
+    });
+
+    const addBtn = $("#drawerAddMember");
+    const addInput = $("#drawerMemberName");
+    if (addBtn && addInput) {
+      const addMember = async () => {
+        const name = addInput.value.trim();
+        if (!name) return;
+        try {
+          await api("POST", `/api/bookings/${state.activeBookingId}/team`, { name });
+          addInput.value = ""; addInput.focus();
+          await refreshBookings(); renderAll(); openDrawer(state.activeBookingId);
+        } catch (err) { showMsg(err.message, "err"); }
+      };
+      addBtn.onclick = addMember;
+      addInput.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); addMember(); } };
+    }
+  }
+
+  function handleFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (files.length === 0) return;
+    const MAX = 4 * 1024 * 1024;
+    files.forEach(f => {
+      if (f.size > MAX) { alert(`${f.name} is larger than 4 MB — skipped.`); return; }
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          await api("POST", `/api/bookings/${state.activeBookingId}/materials`, {
+            name: f.name, size: f.size, type: f.type, data: reader.result
+          });
+          await refreshBookings(); renderAll(); openDrawer(state.activeBookingId);
+        } catch (err) { showMsg(err.message, "err"); }
+      };
+      reader.readAsDataURL(f);
+    });
+  }
+
+  /* ---------- Filters + export ---------- */
   $("#filter").addEventListener("input", renderTable);
   $("#levelFilter").addEventListener("change", renderTable);
 
-  $("#clearAll").addEventListener("click", () => {
-    if (!confirm("Remove ALL bookings, notes, and materials?")) return;
-    save([]); renderAll();
+  $("#clearAll").addEventListener("click", async () => {
+    if (!confirm("Remove ALL visible bookings? This cannot be undone.")) return;
+    try {
+      for (const b of state.bookings.slice()) {
+        await api("DELETE", `/api/bookings/${b.id}`);
+      }
+      await refreshBookings(); renderAll();
+    } catch (err) { showMsg(err.message, "err"); }
   });
 
   $("#exportBtn").addEventListener("click", () => {
-    const list = load();
-    if (list.length === 0) return showMsg("Nothing to export yet.", "err");
-    const cols = ["date","time","duration","level","fullName","email","phone","unit","attendees","format","notes","createdAt"];
+    if (state.bookings.length === 0) return showMsg("Nothing to export.", "err");
+    const cols = ["date","time","duration","level","status","fullName","email","phone","unit","attendees","format","notes","createdAt"];
     const esc = (v) => `"${String(v ?? "").replace(/"/g,'""')}"`;
-    const csv = [cols.join(","), ...list.map(r => cols.map(c => esc(r[c])).join(","))].join("\n");
+    const csv = [cols.join(","), ...state.bookings.map(r => cols.map(c => esc(r[c])).join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `gpl-vpmo-bookings-${toISO(new Date())}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    a.click(); URL.revokeObjectURL(a.href);
   });
 
-  renderAll();
+  /* ---------- Boot ---------- */
+  (async function boot() {
+    try {
+      const { user } = await api("GET", "/api/auth/me");
+      state.user = user;
+    } catch { state.user = null; }
+
+    // If saved view is trainer but not unlocked this session, drop to trainee
+    const savedView = localStorage.getItem(VIEW_KEY) || "trainee";
+    const v = (savedView === "trainer" && isUnlocked()) ? "trainer" : "trainee";
+    state.view = v;
+    state.scope = v === "trainer" ? "all" : "mine";
+    document.body.classList.toggle("view-trainee", v === "trainee");
+    document.body.classList.toggle("view-trainer", v === "trainer");
+    document.querySelectorAll("[data-view-btn]").forEach(b => b.classList.toggle("active", b.dataset.viewBtn === v));
+
+    await applyAuthedState();
+  })();
 </script>
 </body>
 </html>
