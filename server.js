@@ -9,8 +9,9 @@ const ROOT = __dirname;
 const TRAINER_PASSWORD = process.env.TRAINER_PASSWORD || "vpmo2026";
 const TRAINER_FULL_NAME = process.env.TRAINER_FULL_NAME || "Wakeel Zacharias Boodhoo";
 const isTrainerUser = (u) => u && u.full_name && u.full_name.trim().toLowerCase() === TRAINER_FULL_NAME.trim().toLowerCase();
-const MAX_BODY = 10 * 1024 * 1024; // 10 MB (materials are base64-encoded)
+const MAX_BODY = 10 * 1024 * 1024;
 const SESSION_TTL_DAYS = 30;
+const MIN_LEAD_DAYS = 2;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -75,6 +76,11 @@ function clearCookie(res, name) {
 function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString("hex");
 }
+function timingSafeStrEq(a, b) {
+  const ab = Buffer.from(a, "utf8"), bb = Buffer.from(b, "utf8");
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
+}
 function genToken() { return crypto.randomBytes(32).toString("hex"); }
 function uid() { return crypto.randomUUID(); }
 function validEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
@@ -92,11 +98,17 @@ async function getSessionUser(req) {
   return rows[0] || null;
 }
 
-/* ----- DB -> client shape ----- */
-async function serializeBooking(row) {
-  const { rows: team } = await query(`SELECT id, name FROM team_members WHERE booking_id = $1 ORDER BY created_at`, [row.id]);
-  const { rows: notes } = await query(`SELECT id, text, created_at FROM study_notes WHERE booking_id = $1 ORDER BY created_at DESC`, [row.id]);
-  const { rows: mats } = await query(`SELECT id, name, size, mime, data, uploaded_at FROM materials WHERE booking_id = $1 ORDER BY uploaded_at`, [row.id]);
+/* Ownership: only booking owner or trainer may mutate. */
+async function canMutateBooking(user, bookingId) {
+  if (!user) return null;
+  const { rows } = await query(`SELECT user_id FROM bookings WHERE id = $1`, [bookingId]);
+  if (!rows[0]) return { code: 404 };
+  if (rows[0].user_id !== user.id && !isTrainerUser(user)) return { code: 403 };
+  return { ok: true };
+}
+
+/* ----- Bulk serialization: avoids N+1 ----- */
+function rowToBooking(row, teamByBooking, notesByBooking, matsByBooking) {
   return {
     id: row.id,
     fullName: row.full_name,
@@ -117,18 +129,48 @@ async function serializeBooking(row) {
     postponedTo: row.postponed_to ? (row.postponed_to instanceof Date ? row.postponed_to.toISOString().slice(0,10) : row.postponed_to) : null,
     postponedTime: row.postponed_time,
     createdAt: row.created_at,
-    teamMembers: team,
-    studyNotes: notes.map(n => ({ id: n.id, text: n.text, createdAt: n.created_at })),
-    materials: mats.map(m => ({ id: m.id, name: m.name, size: m.size, type: m.mime, data: m.data, uploadedAt: m.uploaded_at }))
+    teamMembers: (teamByBooking[row.id] || []).map(t => ({ id: t.id, name: t.name })),
+    studyNotes: (notesByBooking[row.id] || []).map(n => ({ id: n.id, text: n.text, createdAt: n.created_at })),
+    // Materials: metadata only — data is streamed via /api/materials/:id/download
+    materials: (matsByBooking[row.id] || []).map(m => ({ id: m.id, name: m.name, size: m.size, type: m.mime, uploadedAt: m.uploaded_at, downloadUrl: `/api/materials/${m.id}/download` }))
   };
 }
 
-/* ----- API handlers ----- */
-const routes = [];
-function route(method, pattern, handler) {
-  routes.push({ method, pattern, handler });
+async function serializeBookings(rows) {
+  if (rows.length === 0) return [];
+  const ids = rows.map(r => r.id);
+  const [team, notes, mats] = await Promise.all([
+    query(`SELECT id, booking_id, name FROM team_members WHERE booking_id = ANY($1::text[]) ORDER BY created_at`, [ids]),
+    query(`SELECT id, booking_id, text, created_at FROM study_notes WHERE booking_id = ANY($1::text[]) ORDER BY created_at DESC`, [ids]),
+    query(`SELECT id, booking_id, name, size, mime, uploaded_at FROM materials WHERE booking_id = ANY($1::text[]) ORDER BY uploaded_at`, [ids])
+  ]);
+  const groupBy = (arr) => arr.reduce((acc, r) => ((acc[r.booking_id] = acc[r.booking_id] || []).push(r), acc), {});
+  const teamByBooking = groupBy(team.rows);
+  const notesByBooking = groupBy(notes.rows);
+  const matsByBooking = groupBy(mats.rows);
+  return rows.map(r => rowToBooking(r, teamByBooking, notesByBooking, matsByBooking));
 }
 
+async function serializeOneBooking(id) {
+  const { rows } = await query(`SELECT * FROM bookings WHERE id = $1`, [id]);
+  if (!rows[0]) return null;
+  const [out] = await serializeBookings(rows);
+  return out;
+}
+
+function publicUser(u) {
+  return {
+    id: u.id, username: u.username, email: u.email,
+    fullName: u.full_name, phone: u.phone, unit: u.unit,
+    isTrainer: isTrainerUser(u)
+  };
+}
+
+/* ----- Routes ----- */
+const routes = [];
+const route = (method, pattern, handler) => routes.push({ method, pattern, handler });
+
+/* AUTH */
 route("POST", /^\/api\/auth\/signup$/, async (req, res) => {
   const body = await readBody(req);
   const fullName = (body.fullName || "").trim();
@@ -145,17 +187,23 @@ route("POST", /^\/api\/auth\/signup$/, async (req, res) => {
   if (!unit) return json(res, 400, { error: "Choose your unit." });
   if (password.length < 6) return json(res, 400, { error: "Password must be at least 6 characters." });
 
-  const dup = await query(`SELECT 1 FROM users WHERE username = $1 OR LOWER(email) = LOWER($2)`, [username, email]);
-  if (dup.rowCount) return json(res, 409, { error: "Username or email already exists." });
-
   const salt = crypto.randomBytes(16).toString("hex");
   const passwordHash = hashPassword(password, salt);
-  const { rows } = await query(
-    `INSERT INTO users (username, email, full_name, phone, unit, salt, password_hash)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [username, email, fullName, phone, unit, salt, passwordHash]
-  );
-  const user = rows[0];
+
+  // Rely on DB uniqueness (race-safe) rather than a pre-SELECT.
+  let user;
+  try {
+    const { rows } = await query(
+      `INSERT INTO users (username, email, full_name, phone, unit, salt, password_hash)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [username, email, fullName, phone, unit, salt, passwordHash]
+    );
+    user = rows[0];
+  } catch (e) {
+    if (e.code === "23505") return json(res, 409, { error: "Username or email already exists." });
+    throw e;
+  }
+
   const token = genToken();
   const expires = new Date(Date.now() + SESSION_TTL_DAYS * 86400 * 1000);
   await query(`INSERT INTO sessions (token, user_id, expires_at) VALUES ($1,$2,$3)`, [token, user.id, expires]);
@@ -170,7 +218,10 @@ route("POST", /^\/api\/auth\/login$/, async (req, res) => {
   const user = rows[0];
   if (!user) return json(res, 401, { error: "Invalid username or password." });
   const hash = hashPassword(password, user.salt);
-  if (hash !== user.password_hash) return json(res, 401, { error: "Invalid username or password." });
+  if (!timingSafeStrEq(hash, user.password_hash)) return json(res, 401, { error: "Invalid username or password." });
+
+  // Opportunistic expired-session cleanup
+  query(`DELETE FROM sessions WHERE expires_at < NOW()`).catch(() => {});
 
   const token = genToken();
   const expires = new Date(Date.now() + SESSION_TTL_DAYS * 86400 * 1000);
@@ -197,18 +248,11 @@ route("POST", /^\/api\/auth\/trainer$/, async (req, res) => {
   if (!user) return json(res, 401, { error: "Login required" });
   if (!isTrainerUser(user)) return json(res, 403, { error: "Your account is not authorised for trainer access." });
   const { password = "" } = await readBody(req);
-  if (password !== TRAINER_PASSWORD) return json(res, 401, { error: "Wrong trainer password." });
+  if (!timingSafeStrEq(password, TRAINER_PASSWORD)) return json(res, 401, { error: "Wrong trainer password." });
   json(res, 200, { ok: true });
 });
 
-function publicUser(u) {
-  return {
-    id: u.id, username: u.username, email: u.email,
-    fullName: u.full_name, phone: u.phone, unit: u.unit,
-    isTrainer: isTrainerUser(u)
-  };
-}
-
+/* BOOKINGS */
 route("GET", /^\/api\/bookings$/, async (req, res) => {
   const user = await getSessionUser(req);
   if (!user) return json(res, 401, { error: "Login required" });
@@ -221,9 +265,7 @@ route("GET", /^\/api\/bookings$/, async (req, res) => {
   } else {
     ({ rows } = await query(`SELECT * FROM bookings WHERE user_id = $1 ORDER BY date, "time"`, [user.id]));
   }
-  const out = [];
-  for (const r of rows) out.push(await serializeBooking(r));
-  json(res, 200, { bookings: out });
+  json(res, 200, { bookings: await serializeBookings(rows) });
 });
 
 route("POST", /^\/api\/bookings$/, async (req, res) => {
@@ -232,15 +274,31 @@ route("POST", /^\/api\/bookings$/, async (req, res) => {
   const b = await readBody(req);
 
   if (!b.level || !b.date || !b.time || !b.duration) return json(res, 400, { error: "Missing booking fields." });
+  const dur = Number(b.duration);
+  if (!(dur > 0 && dur <= 600)) return json(res, 400, { error: "Invalid duration." });
+
+  // Minimum lead time: booking date must be at least MIN_LEAD_DAYS days ahead.
+  // Trainer can bypass for rescheduling flexibility.
+  if (!isTrainerUser(user)) {
+    const earliest = new Date(); earliest.setHours(0,0,0,0);
+    earliest.setDate(earliest.getDate() + MIN_LEAD_DAYS);
+    const picked = new Date(b.date + "T00:00:00");
+    if (picked < earliest) return json(res, 400, { error: `Please book at least ${MIN_LEAD_DAYS} days in advance.` });
+  }
   const role = b.role === "UnitHead" ? "UnitHead" : "Member";
   const teamMembers = role === "UnitHead" ? (Array.isArray(b.teamMembers) ? b.teamMembers : []) : [];
-  const attendees = role === "UnitHead" ? teamMembers.length : (Number(b.attendees) || 1);
+  const attendees = role === "UnitHead" ? teamMembers.length : Math.max(1, Number(b.attendees) || 1);
   if (role === "UnitHead" && teamMembers.length === 0) return json(res, 400, { error: "Add at least one team member." });
 
-  // Conflict: same user, same date/time overlap
-  const { rows: exist } = await query(`SELECT id, date, "time", duration, full_name FROM bookings WHERE user_id = $1 AND date = $2`, [user.id, b.date]);
+  // Conflict detection done in SQL for efficiency + consistency
+  const { rows: exist } = await query(
+    `SELECT id, "time", duration FROM bookings
+     WHERE user_id = $1 AND date = $2
+       AND status != 'Cancelled'`,
+    [user.id, b.date]
+  );
   const toMin = (t) => { const [h,m]=t.split(":").map(Number); return h*60+m; };
-  const ns = toMin(b.time), ne = ns + Number(b.duration);
+  const ns = toMin(b.time), ne = ns + dur;
   const conflict = exist.find(x => {
     const xs = toMin(x.time), xe = xs + x.duration;
     return ns < xe && xs < ne;
@@ -248,23 +306,28 @@ route("POST", /^\/api\/bookings$/, async (req, res) => {
   if (conflict) return json(res, 409, { error: `Time conflicts with your existing booking at ${conflict.time}.` });
 
   const id = uid();
-  await query(
-    `INSERT INTO bookings (id, user_id, full_name, email, phone, unit, level, role, attendees, date, "time", duration, format, notes, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'Scheduled')`,
-    [id, user.id, user.full_name, user.email, user.phone, user.unit, b.level, role, attendees, b.date, b.time, Number(b.duration), b.format || "In-person", b.notes || ""]
-  );
-  for (const tm of teamMembers) {
-    await query(`INSERT INTO team_members (id, booking_id, name) VALUES ($1,$2,$3)`, [uid(), id, String(tm.name || tm).trim()]);
+  try {
+    await query(
+      `INSERT INTO bookings (id, user_id, full_name, email, phone, unit, level, role, attendees, date, "time", duration, format, notes, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'Scheduled')`,
+      [id, user.id, user.full_name, user.email, user.phone, user.unit, b.level, role, attendees, b.date, b.time, dur, b.format || "In-person", b.notes || ""]
+    );
+    for (const tm of teamMembers) {
+      const name = String((tm && tm.name) || tm || "").trim();
+      if (name) await query(`INSERT INTO team_members (id, booking_id, name) VALUES ($1,$2,$3)`, [uid(), id, name]);
+    }
+  } catch (e) {
+    if (e.code === "23514") return json(res, 400, { error: "Invalid value for a booking field." });
+    throw e;
   }
-  const { rows } = await query(`SELECT * FROM bookings WHERE id = $1`, [id]);
-  json(res, 200, { booking: await serializeBooking(rows[0]) });
+  json(res, 200, { booking: await serializeOneBooking(id) });
 });
 
 route("PATCH", /^\/api\/bookings\/([^/]+)$/, async (req, res, [, id]) => {
   const user = await getSessionUser(req);
+  const auth = await canMutateBooking(user, id);
   if (!user) return json(res, 401, { error: "Login required" });
-  const { rows: [b] } = await query(`SELECT * FROM bookings WHERE id = $1`, [id]);
-  if (!b) return json(res, 404, { error: "Not found" });
+  if (!auth.ok) return json(res, auth.code, { error: auth.code === 404 ? "Not found" : "Not authorised." });
 
   const body = await readBody(req);
   const updates = [];
@@ -272,9 +335,9 @@ route("PATCH", /^\/api\/bookings\/([^/]+)$/, async (req, res, [, id]) => {
   let i = 1;
   if (body.status && ["Scheduled","Completed","Cancelled","Postponed"].includes(body.status)) {
     updates.push(`status = $${i++}`); values.push(body.status);
-    if (body.status === "Completed") { updates.push(`completed_at = NOW()`); }
-    if (body.status === "Cancelled") { updates.push(`cancelled_at = NOW()`); }
-    if (body.status === "Scheduled") { updates.push(`completed_at = NULL`, `cancelled_at = NULL`, `postponed_to = NULL`, `postponed_time = NULL`); }
+    if (body.status === "Completed") updates.push(`completed_at = NOW()`);
+    if (body.status === "Cancelled") updates.push(`cancelled_at = NOW()`);
+    if (body.status === "Scheduled") updates.push(`completed_at = NULL`, `cancelled_at = NULL`, `postponed_to = NULL`, `postponed_time = NULL`);
   }
   if (body.postponedTo !== undefined) { updates.push(`postponed_to = $${i++}`); values.push(body.postponedTo || null); }
   if (body.postponedTime !== undefined) { updates.push(`postponed_time = $${i++}`); values.push(body.postponedTime || null); }
@@ -282,77 +345,113 @@ route("PATCH", /^\/api\/bookings\/([^/]+)$/, async (req, res, [, id]) => {
 
   values.push(id);
   await query(`UPDATE bookings SET ${updates.join(", ")} WHERE id = $${i}`, values);
-  const { rows: [updated] } = await query(`SELECT * FROM bookings WHERE id = $1`, [id]);
-  json(res, 200, { booking: await serializeBooking(updated) });
+  json(res, 200, { booking: await serializeOneBooking(id) });
 });
 
 route("DELETE", /^\/api\/bookings\/([^/]+)$/, async (req, res, [, id]) => {
   const user = await getSessionUser(req);
+  const auth = await canMutateBooking(user, id);
   if (!user) return json(res, 401, { error: "Login required" });
+  if (!auth.ok) return json(res, auth.code, { error: auth.code === 404 ? "Not found" : "Not authorised." });
   await query(`DELETE FROM bookings WHERE id = $1`, [id]);
   json(res, 200, { ok: true });
 });
 
+/* NOTES */
 route("POST", /^\/api\/bookings\/([^/]+)\/notes$/, async (req, res, [, id]) => {
   const user = await getSessionUser(req);
+  const auth = await canMutateBooking(user, id);
   if (!user) return json(res, 401, { error: "Login required" });
+  if (!auth.ok) return json(res, auth.code, { error: auth.code === 404 ? "Not found" : "Not authorised." });
   const { text = "" } = await readBody(req);
   if (!text.trim()) return json(res, 400, { error: "Empty note." });
-  const nid = uid();
-  await query(`INSERT INTO study_notes (id, booking_id, text) VALUES ($1,$2,$3)`, [nid, id, text.trim()]);
-  const { rows: [booking] } = await query(`SELECT * FROM bookings WHERE id = $1`, [id]);
-  json(res, 200, { booking: await serializeBooking(booking) });
+  await query(`INSERT INTO study_notes (id, booking_id, text) VALUES ($1,$2,$3)`, [uid(), id, text.trim()]);
+  json(res, 200, { booking: await serializeOneBooking(id) });
 });
 
 route("DELETE", /^\/api\/bookings\/([^/]+)\/notes\/([^/]+)$/, async (req, res, [, bid, nid]) => {
   const user = await getSessionUser(req);
+  const auth = await canMutateBooking(user, bid);
   if (!user) return json(res, 401, { error: "Login required" });
+  if (!auth.ok) return json(res, auth.code, { error: auth.code === 404 ? "Not found" : "Not authorised." });
   await query(`DELETE FROM study_notes WHERE id = $1 AND booking_id = $2`, [nid, bid]);
-  const { rows: [booking] } = await query(`SELECT * FROM bookings WHERE id = $1`, [bid]);
-  json(res, 200, { booking: booking ? await serializeBooking(booking) : null });
+  json(res, 200, { booking: await serializeOneBooking(bid) });
 });
 
+/* MATERIALS */
 route("POST", /^\/api\/bookings\/([^/]+)\/materials$/, async (req, res, [, id]) => {
   const user = await getSessionUser(req);
+  const auth = await canMutateBooking(user, id);
   if (!user) return json(res, 401, { error: "Login required" });
+  if (!auth.ok) return json(res, auth.code, { error: auth.code === 404 ? "Not found" : "Not authorised." });
   const { name, size, type, data } = await readBody(req);
   if (!name || !data) return json(res, 400, { error: "Missing file data." });
-  const mid = uid();
   await query(
     `INSERT INTO materials (id, booking_id, name, size, mime, data) VALUES ($1,$2,$3,$4,$5,$6)`,
-    [mid, id, name, Number(size) || 0, type || null, data]
+    [uid(), id, name, Number(size) || 0, type || null, data]
   );
-  const { rows: [booking] } = await query(`SELECT * FROM bookings WHERE id = $1`, [id]);
-  json(res, 200, { booking: await serializeBooking(booking) });
+  json(res, 200, { booking: await serializeOneBooking(id) });
 });
 
 route("DELETE", /^\/api\/bookings\/([^/]+)\/materials\/([^/]+)$/, async (req, res, [, bid, mid]) => {
   const user = await getSessionUser(req);
+  const auth = await canMutateBooking(user, bid);
   if (!user) return json(res, 401, { error: "Login required" });
+  if (!auth.ok) return json(res, auth.code, { error: auth.code === 404 ? "Not found" : "Not authorised." });
   await query(`DELETE FROM materials WHERE id = $1 AND booking_id = $2`, [mid, bid]);
-  const { rows: [booking] } = await query(`SELECT * FROM bookings WHERE id = $1`, [bid]);
-  json(res, 200, { booking: booking ? await serializeBooking(booking) : null });
+  json(res, 200, { booking: await serializeOneBooking(bid) });
 });
 
-route("POST", /^\/api\/bookings\/([^/]+)\/team$/, async (req, res, [, id]) => {
+// Stream material on demand (avoids including base64 blobs in list responses)
+route("GET", /^\/api\/materials\/([^/]+)\/download$/, async (req, res, [, mid]) => {
   const user = await getSessionUser(req);
   if (!user) return json(res, 401, { error: "Login required" });
+  const { rows } = await query(
+    `SELECT m.*, b.user_id AS owner_id FROM materials m JOIN bookings b ON b.id = m.booking_id WHERE m.id = $1`,
+    [mid]
+  );
+  const row = rows[0];
+  if (!row) return json(res, 404, { error: "Not found" });
+  if (row.owner_id !== user.id && !isTrainerUser(user)) return json(res, 403, { error: "Not authorised." });
+
+  // Decode the data: URI into raw bytes
+  const m = /^data:([^;,]+)?(?:;([^,]+))?,(.*)$/.exec(row.data);
+  if (!m) return json(res, 500, { error: "Invalid stored material." });
+  const mimeHint = m[1] || row.mime || "application/octet-stream";
+  const encoding = (m[2] || "").toLowerCase();
+  const payload = m[3];
+  const buf = encoding === "base64" ? Buffer.from(payload, "base64") : Buffer.from(decodeURIComponent(payload), "utf8");
+
+  res.writeHead(200, {
+    "Content-Type": mimeHint,
+    "Content-Length": buf.length,
+    "Content-Disposition": `attachment; filename="${row.name.replace(/"/g, "")}"`,
+    "Cache-Control": "private, max-age=60"
+  });
+  res.end(buf);
+});
+
+/* TEAM */
+route("POST", /^\/api\/bookings\/([^/]+)\/team$/, async (req, res, [, id]) => {
+  const user = await getSessionUser(req);
+  const auth = await canMutateBooking(user, id);
+  if (!user) return json(res, 401, { error: "Login required" });
+  if (!auth.ok) return json(res, auth.code, { error: auth.code === 404 ? "Not found" : "Not authorised." });
   const { name = "" } = await readBody(req);
   if (!name.trim()) return json(res, 400, { error: "Empty name." });
-  const mid = uid();
-  await query(`INSERT INTO team_members (id, booking_id, name) VALUES ($1,$2,$3)`, [mid, id, name.trim()]);
-  await query(`UPDATE bookings SET attendees = (SELECT COUNT(*) FROM team_members WHERE booking_id = $1) WHERE id = $1`, [id]);
-  const { rows: [booking] } = await query(`SELECT * FROM bookings WHERE id = $1`, [id]);
-  json(res, 200, { booking: await serializeBooking(booking) });
+  await query(`INSERT INTO team_members (id, booking_id, name) VALUES ($1,$2,$3)`, [uid(), id, name.trim()]);
+  await query(`UPDATE bookings SET attendees = GREATEST(1, (SELECT COUNT(*) FROM team_members WHERE booking_id = $1)) WHERE id = $1`, [id]);
+  json(res, 200, { booking: await serializeOneBooking(id) });
 });
 
 route("DELETE", /^\/api\/bookings\/([^/]+)\/team\/([^/]+)$/, async (req, res, [, bid, mid]) => {
   const user = await getSessionUser(req);
+  const auth = await canMutateBooking(user, bid);
   if (!user) return json(res, 401, { error: "Login required" });
+  if (!auth.ok) return json(res, auth.code, { error: auth.code === 404 ? "Not found" : "Not authorised." });
   await query(`DELETE FROM team_members WHERE id = $1 AND booking_id = $2`, [mid, bid]);
   await query(`UPDATE bookings SET attendees = GREATEST(1, (SELECT COUNT(*) FROM team_members WHERE booking_id = $1)) WHERE id = $1`, [bid]);
-  const { rows: [booking] } = await query(`SELECT * FROM bookings WHERE id = $1`, [bid]);
-  json(res, 200, { booking: booking ? await serializeBooking(booking) : null });
+  json(res, 200, { booking: await serializeOneBooking(bid) });
 });
 
 /* ----- Static files ----- */
@@ -379,7 +478,6 @@ function serveStatic(req, res) {
   });
 }
 
-/* ----- Main handler ----- */
 const server = http.createServer(async (req, res) => {
   try {
     if (req.url.startsWith("/api/")) {
@@ -397,16 +495,16 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-/* ----- Boot ----- */
 (async () => {
   try {
-    if (process.env.DATABASE_URL) {
-      await migrate();
-    } else {
-      console.warn("DATABASE_URL not set — starting without DB (API will 500).");
-    }
+    if (process.env.DATABASE_URL) await migrate();
+    else console.warn("DATABASE_URL not set — starting without DB (API will 500).");
   } catch (e) {
     console.error("Migration failed:", e);
   }
+  // Periodic expired-session cleanup (every 6 hours)
+  setInterval(() => {
+    if (process.env.DATABASE_URL) query(`DELETE FROM sessions WHERE expires_at < NOW()`).catch(() => {});
+  }, 6 * 60 * 60 * 1000).unref();
   server.listen(PORT, () => console.log(`GPL VPMO training listening on :${PORT}`));
 })();

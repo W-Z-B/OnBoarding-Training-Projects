@@ -850,6 +850,10 @@
         <p class="help">List each team member by name. The total attendee count updates automatically. You can also add them later from the user drawer.</p>
       </div>
 
+      <div style="margin-top:16px; padding:10px 12px; border:1px solid color-mix(in srgb, var(--brand) 25%, transparent); background: var(--brand-soft); color: var(--brand); border-radius:var(--radius-xs); font-size:12px; line-height:1.4;">
+        <strong>Plan ahead:</strong> Training must be booked at least <strong>2 days in advance</strong> so trainers can prepare materials and coordinate your unit's availability.
+      </div>
+
       <div class="row-3">
         <div>
           <label for="date">Date</label>
@@ -1477,11 +1481,23 @@
   }
 
   /* ---------- Booking form (trainee) ---------- */
+  const MIN_LEAD_DAYS = 2;
+  function earliestBookableISO() {
+    const d = new Date(); d.setDate(d.getDate() + MIN_LEAD_DAYS);
+    return toISO(d);
+  }
   (function initDateDefault() {
-    const iso = toISO(new Date());
+    const iso = earliestBookableISO();
     $("#date").min = iso; $("#date").value = iso;
     $("#time").value = "10:00";
   })();
+  $("#date").addEventListener("change", () => {
+    const min = earliestBookableISO();
+    if ($("#date").value && $("#date").value < min) {
+      $("#date").value = min;
+      showMsg(`Please select a date at least ${MIN_LEAD_DAYS} days in advance.`, "err");
+    }
+  });
 
   function renderPendingTeam() {
     const wrap = $("#teamList");
@@ -1525,6 +1541,7 @@
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target).entries());
     if (!$("#confirmDevices").checked) return showMsg("Please confirm you will bring your work laptop and phone.", "err");
+    if (data.date && data.date < earliestBookableISO()) return showMsg(`Please select a date at least ${MIN_LEAD_DAYS} days in advance.`, "err");
 
     const payload = {
       level: data.level,
@@ -1704,7 +1721,7 @@
         </div>
         <div class="fname" title="${escapeHtml(m.name)}">${escapeHtml(m.name)}</div>
         <div class="fsize">${fmtBytes(m.size)}</div>
-        <a href="${m.data}" download="${escapeHtml(m.name)}" class="fdelete" title="Download" style="color:var(--brand);">
+        <a href="${m.downloadUrl || m.data}" download="${escapeHtml(m.name)}" class="fdelete" title="Download" style="color:var(--brand);">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </a>
         <button class="fdelete" data-mat-id="${m.id}" title="Remove">
