@@ -7,6 +7,8 @@ const { query, migrate } = require("./db");
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const TRAINER_PASSWORD = process.env.TRAINER_PASSWORD || "vpmo2026";
+const TRAINER_FULL_NAME = process.env.TRAINER_FULL_NAME || "Wakeel Zacharias Boodhoo";
+const isTrainerUser = (u) => u && u.full_name && u.full_name.trim().toLowerCase() === TRAINER_FULL_NAME.trim().toLowerCase();
 const MAX_BODY = 10 * 1024 * 1024; // 10 MB (materials are base64-encoded)
 const SESSION_TTL_DAYS = 30;
 
@@ -193,13 +195,18 @@ route("GET", /^\/api\/auth\/me$/, async (req, res) => {
 route("POST", /^\/api\/auth\/trainer$/, async (req, res) => {
   const user = await getSessionUser(req);
   if (!user) return json(res, 401, { error: "Login required" });
+  if (!isTrainerUser(user)) return json(res, 403, { error: "Your account is not authorised for trainer access." });
   const { password = "" } = await readBody(req);
   if (password !== TRAINER_PASSWORD) return json(res, 401, { error: "Wrong trainer password." });
   json(res, 200, { ok: true });
 });
 
 function publicUser(u) {
-  return { id: u.id, username: u.username, email: u.email, fullName: u.full_name, phone: u.phone, unit: u.unit };
+  return {
+    id: u.id, username: u.username, email: u.email,
+    fullName: u.full_name, phone: u.phone, unit: u.unit,
+    isTrainer: isTrainerUser(u)
+  };
 }
 
 route("GET", /^\/api\/bookings$/, async (req, res) => {
@@ -209,7 +216,7 @@ route("GET", /^\/api\/bookings$/, async (req, res) => {
   const scope = url.searchParams.get("scope") || "mine";
   let rows;
   if (scope === "all") {
-    // In future could require trainer-auth; trainer password is checked on the client before allowing this scope
+    if (!isTrainerUser(user)) return json(res, 403, { error: "Not authorised." });
     ({ rows } = await query(`SELECT * FROM bookings ORDER BY date, "time"`));
   } else {
     ({ rows } = await query(`SELECT * FROM bookings WHERE user_id = $1 ORDER BY date, "time"`, [user.id]));

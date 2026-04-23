@@ -1173,6 +1173,16 @@
       $("#userChip").style.display = "inline-flex";
       $("#userChipAvatar").textContent = initials(u.fullName);
       $("#userChipName").textContent = u.fullName;
+      // Only the authorised trainer sees the Trainer toggle
+      const trainerBtn = document.querySelector('[data-view-btn="trainer"]');
+      if (trainerBtn) trainerBtn.style.display = u.isTrainer ? "" : "none";
+      if (!u.isTrainer && state.view === "trainer") {
+        state.view = "trainee"; state.scope = "mine";
+        document.body.classList.remove("view-trainer");
+        document.body.classList.add("view-trainee");
+        document.querySelectorAll("[data-view-btn]").forEach(b => b.classList.toggle("active", b.dataset.viewBtn === "trainee"));
+        sessionStorage.removeItem(AUTH_KEY);
+      }
       await refreshBookings();
     } else {
       $("#userChip").style.display = "none";
