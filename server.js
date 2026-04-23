@@ -107,6 +107,8 @@ function publicUserListRow(u) {
     email: u.email, unit: u.unit, phone: u.phone,
     isTrainer: isTrainerUser(u),
     lastSeenAt: u.last_seen_at,
+    hasVpmoApk: !!u.has_vpmo_apk,
+    apkConfirmedAt: u.apk_confirmed_at,
     createdAt: u.created_at
   };
 }
@@ -482,6 +484,22 @@ route("GET", /^\/api\/users$/, async (req, res) => {
     ));
   }
   json(res, 200, { users: rows.map(publicUserListRow) });
+});
+
+/* APK tracking (trainer only) */
+route("PATCH", /^\/api\/users\/([0-9]+)\/apk$/, async (req, res, [, uid]) => {
+  const user = await getSessionUser(req);
+  if (!user) return json(res, 401, { error: "Login required" });
+  if (!isTrainerUser(user)) return json(res, 403, { error: "Trainer only." });
+  const { hasVpmoApk } = await readBody(req);
+  const flag = !!hasVpmoApk;
+  const { rows } = await query(
+    `UPDATE users SET has_vpmo_apk = $1, apk_confirmed_at = CASE WHEN $1 THEN NOW() ELSE NULL END
+     WHERE id = $2 RETURNING *`,
+    [flag, Number(uid)]
+  );
+  if (!rows[0]) return json(res, 404, { error: "User not found" });
+  json(res, 200, { user: publicUserListRow(rows[0]) });
 });
 
 /* MESSAGES */

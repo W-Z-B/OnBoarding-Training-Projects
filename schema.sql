@@ -78,6 +78,9 @@ CREATE INDEX IF NOT EXISTS materials_booking_idx ON materials(booking_id, upload
 
 -- Presence tracking
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+-- VPMO platform APK installed flag (tracked by trainer)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS has_vpmo_apk BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS apk_confirmed_at TIMESTAMPTZ;
 
 -- Direct messages between users (with optional forwarded-note link)
 CREATE TABLE IF NOT EXISTS messages (

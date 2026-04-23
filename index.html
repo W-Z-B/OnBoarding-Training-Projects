@@ -672,6 +672,22 @@
     border-radius: 10px; background: var(--brand); color: white;
     font-size: 10px; font-weight: 700; display: grid; place-items: center;
   }
+  .apk-toggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface-2);
+    cursor: pointer; font-size: 11px; font-weight: 600;
+    color: var(--text-2); transition: all .15s;
+    user-select: none;
+  }
+  .apk-toggle:hover { border-color: var(--border-strong); color: var(--text); }
+  .apk-toggle input { width: auto; margin: 0; cursor: pointer; accent-color: var(--good); }
+  .apk-toggle.checked {
+    background: var(--good-soft); color: var(--good);
+    border-color: color-mix(in srgb, var(--good) 35%, transparent);
+  }
+  .apk-toggle svg { width: 12px; height: 12px; }
+  .user-row .right-actions { display: flex; align-items: center; gap: 8px; }
 
   /* Chat panel */
   .chat-drawer {
@@ -909,6 +925,7 @@
     <div class="stat"><div class="stat-label">Upcoming</div><div class="stat-value" id="statUpcoming">0</div></div>
     <div class="stat"><div class="stat-label">Units Enrolled</div><div class="stat-value" id="statUnits">0</div></div>
     <div class="stat"><div class="stat-label">Total Attendees</div><div class="stat-value" id="statPeople">0</div></div>
+    <div class="stat"><div class="stat-label">VPMO APK Installed</div><div class="stat-value" id="statApk">0 / 0</div></div>
   </div>
 </section>
 
@@ -1410,6 +1427,12 @@
     $("#statUpcoming").textContent = list.filter(b => (b.date || "") >= todayISO).length;
     $("#statUnits").textContent = new Set(list.map(b => (b.unit || "").toLowerCase())).size;
     $("#statPeople").textContent = list.reduce((s,b) => s + (Number(b.attendees)||1), 0);
+    const apkEl = $("#statApk");
+    if (apkEl) {
+      const others = (usersCache || []).filter(u => !u.isTrainer);
+      const installed = others.filter(u => u.hasVpmoApk).length;
+      apkEl.textContent = `${installed} / ${others.length}`;
+    }
   }
 
   /* ---------- Calendar ---------- */
@@ -1687,9 +1710,17 @@
       wrap.innerHTML = `<div class="empty" style="padding:18px; font-size:12px;">No users yet.</div>`;
       return;
     }
+    const canEditApk = state.user && state.user.isTrainer;
     wrap.innerHTML = others.map(u => {
       const pres = presenceClass(u.lastSeenAt);
       const unread = unreadForUser(u.id);
+      const apkTitle = u.apkConfirmedAt ? `Confirmed ${new Date(u.apkConfirmedAt).toLocaleDateString()}` : "Not yet confirmed";
+      const apkToggle = canEditApk && !u.isTrainer ? `
+        <label class="apk-toggle ${u.hasVpmoApk ? 'checked' : ''}" title="${apkTitle}" data-apk-for="${u.id}">
+          <input type="checkbox" ${u.hasVpmoApk ? 'checked' : ''} />
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+          VPMO APK
+        </label>` : (u.hasVpmoApk ? `<span class="apk-toggle checked" title="${apkTitle}"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>APK</span>` : "");
       return `<div class="user-row fade-in" data-user-id="${u.id}">
         <div class="avatar">${escapeHtml(initials(u.fullName))}</div>
         <div>
@@ -1700,11 +1731,39 @@
           </div>
           <div class="meta">${escapeHtml(u.unit)} · @${escapeHtml(u.username)} · ${presenceLabel(u.lastSeenAt)}</div>
         </div>
-        ${unread ? `<span class="unread-badge">${unread}</span>` : ""}
+        <div class="right-actions">
+          ${apkToggle}
+          ${unread ? `<span class="unread-badge">${unread}</span>` : ""}
+        </div>
       </div>`;
     }).join("");
+
+    // APK toggle — stop propagation so row click (chat) doesn't trigger
+    wrap.querySelectorAll("[data-apk-for]").forEach(el => {
+      el.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const userId = Number(el.dataset.apkFor);
+        const cb = el.querySelector("input");
+        const newVal = cb.checked;
+        try {
+          await api("PATCH", `/api/users/${userId}/apk`, { hasVpmoApk: newVal });
+          // Update local cache without full refetch
+          const u = usersCache.find(x => x.id === userId);
+          if (u) { u.hasVpmoApk = newVal; u.apkConfirmedAt = newVal ? new Date().toISOString() : null; }
+          renderUsers();
+        } catch (err) {
+          cb.checked = !newVal;
+          showMsg(err.message, "err");
+        }
+      });
+    });
+
+    // Row click → open chat (but not when clicking the APK toggle)
     wrap.querySelectorAll("[data-user-id]").forEach(el => {
-      el.addEventListener("click", () => openChat(Number(el.dataset.userId)));
+      el.addEventListener("click", (e) => {
+        if (e.target.closest("[data-apk-for]")) return;
+        openChat(Number(el.dataset.userId));
+      });
     });
   }
 
