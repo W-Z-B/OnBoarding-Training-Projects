@@ -1,0 +1,1904 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GPL Onboarding & Training — VPMO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fafbff;
+    --bg-2: #f2f4fb;
+    --surface: #ffffff;
+    --surface-2: #f7f8fc;
+    --border: #e6e8f0;
+    --border-strong: #d3d7e3;
+    --text: #0f172a;
+    --text-2: #475569;
+    --muted: #94a3b8;
+    --brand: #0a2d82;
+    --brand-2: #0b3ba8;
+    --brand-soft: #e7ecfa;
+    --brand-accent: #1e5fd1;
+    --good: #10b981;
+    --good-soft: #ecfdf5;
+    --bad: #ef4444;
+    --bad-soft: #fef2f2;
+    --warn: #f59e0b;
+    --l1: #3b82f6; --l1-soft: #eff6ff;
+    --l2: #10b981; --l2-soft: #ecfdf5;
+    --l3: #f59e0b; --l3-soft: #fffbeb;
+    --l4: #ec4899; --l4-soft: #fdf2f8;
+    --l5: #8b5cf6; --l5-soft: #f5f3ff;
+    --shadow-sm: 0 1px 2px rgba(15,23,42,.04), 0 1px 1px rgba(15,23,42,.03);
+    --shadow-md: 0 4px 12px rgba(15,23,42,.06), 0 2px 4px rgba(15,23,42,.04);
+    --shadow-lg: 0 20px 40px -12px rgba(15,23,42,.12), 0 8px 16px -6px rgba(15,23,42,.06);
+    --radius: 14px;
+    --radius-sm: 10px;
+    --radius-xs: 8px;
+  }
+  [data-theme="dark"] {
+    --bg: #0b0f1a;
+    --bg-2: #0e1422;
+    --surface: #111827;
+    --surface-2: #0f1524;
+    --border: #1f2937;
+    --border-strong: #374151;
+    --text: #f1f5f9;
+    --text-2: #cbd5e1;
+    --muted: #64748b;
+    --brand: #6b8fff;
+    --brand-2: #4e78ff;
+    --brand-soft: #1a2550;
+    --good-soft: rgba(16,185,129,.1);
+    --bad-soft: rgba(239,68,68,.1);
+    --l1-soft: rgba(59,130,246,.12);
+    --l2-soft: rgba(16,185,129,.12);
+    --l3-soft: rgba(245,158,11,.12);
+    --l4-soft: rgba(236,72,153,.12);
+    --l5-soft: rgba(139,92,246,.12);
+    --shadow-md: 0 4px 12px rgba(0,0,0,.3);
+    --shadow-lg: 0 20px 40px -12px rgba(0,0,0,.5);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.01em;
+    transition: background .3s, color .3s;
+  }
+  code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+  /* Top bar */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    backdrop-filter: saturate(180%) blur(14px);
+    -webkit-backdrop-filter: saturate(180%) blur(14px);
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-inner {
+    max-width: 1280px; margin: 0 auto;
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 15px; letter-spacing: -0.02em;
+  }
+  .brand-mark {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: white;
+    display: grid; place-items: center;
+    overflow: visible; flex-shrink: 0;
+    box-shadow: 0 4px 12px -2px color-mix(in srgb, var(--brand) 40%, transparent);
+  }
+  .brand-mark svg { width: 100%; height: 100%; display: block; }
+  .topbar-inner { padding-top: 12px; padding-bottom: 12px; }
+  .brand-mark img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .brand-mark .fallback {
+    color: var(--brand); font-weight: 800; font-size: 11px; letter-spacing: .02em;
+  }
+  .brand .sub { color: var(--muted); font-weight: 500; margin-left: 4px; }
+  .top-actions { display: flex; align-items: center; gap: 8px; }
+  .icon-btn {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    display: grid; place-items: center; cursor: pointer;
+    color: var(--text-2); transition: all .15s;
+    padding: 0;
+  }
+  .icon-btn:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-strong); }
+  .icon-btn svg { width: 16px; height: 16px; }
+
+  /* Hero */
+  .hero {
+    max-width: 1280px; margin: 0 auto; padding: 40px 24px 16px;
+  }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--brand-soft); color: var(--brand);
+    padding: 5px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .hero h1 {
+    margin: 14px 0 10px; font-size: 34px; font-weight: 700;
+    letter-spacing: -0.03em; line-height: 1.15;
+  }
+  .hero p { margin: 0; color: var(--text-2); font-size: 15px; max-width: 640px; line-height: 1.6; }
+
+  /* Stat cards */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 24px; }
+  @media (max-width: 720px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px;
+    box-shadow: var(--shadow-sm);
+  }
+  .stat-label { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+  .stat-value { font-size: 24px; font-weight: 700; margin-top: 6px; letter-spacing: -0.02em; }
+  .stat-delta { font-size: 12px; color: var(--good); font-weight: 500; margin-top: 4px; }
+
+  /* Grid */
+  main {
+    max-width: 1280px; margin: 0 auto;
+    padding: 24px; display: grid;
+    grid-template-columns: 1fr 1fr; gap: 20px;
+  }
+  @media (max-width: 1040px) { main { grid-template-columns: 1fr; } }
+  #calendarCard { order: -1; }
+  @media (min-width: 1041px) { #calendarCard { order: 0; } }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+    box-shadow: var(--shadow-sm);
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .card.full { grid-column: 1 / -1; }
+  .card h2 {
+    margin: 0 0 4px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card .subtitle { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+
+  /* Form */
+  label {
+    display: block; font-size: 12px; color: var(--text-2);
+    margin: 14px 0 6px; font-weight: 500;
+  }
+  input, select, textarea {
+    width: 100%; padding: 11px 13px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    font-size: 14px; font-family: inherit;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  input::placeholder, textarea::placeholder { color: var(--muted); }
+  input:hover, select:hover, textarea:hover { border-color: var(--border-strong); }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 15%, transparent);
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 520px) { .row, .row-3 { grid-template-columns: 1fr; } }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 11px 16px;
+    border-radius: var(--radius-xs);
+    border: 1px solid transparent;
+    font-family: inherit; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all .15s;
+    background: var(--brand); color: white;
+  }
+  .btn:hover { background: var(--brand-2); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .btn:active { transform: translateY(0); }
+  .btn.full { width: 100%; margin-top: 18px; padding: 13px; }
+  .btn.ghost {
+    background: transparent; color: var(--text-2);
+    border: 1px solid var(--border);
+  }
+  .btn.ghost:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-strong); box-shadow: none; transform: none; }
+  .btn.sm { padding: 6px 10px; font-size: 12px; font-weight: 500; }
+  .btn.danger { background: transparent; color: var(--bad); border: 1px solid var(--border); }
+  .btn.danger:hover { background: var(--bad-soft); border-color: var(--bad); box-shadow: none; transform: none; }
+
+  .msg {
+    margin-top: 14px; padding: 11px 13px;
+    border-radius: var(--radius-xs);
+    font-size: 13px; display: none;
+    align-items: center; gap: 8px;
+  }
+  .msg.ok { background: var(--good-soft); color: var(--good); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); display: flex; }
+  .msg.err { background: var(--bad-soft); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 30%, transparent); display: flex; }
+
+  .help { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+
+  /* Calendar */
+  .cal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 10px; margin-bottom: 14px;
+  }
+  .cal-title { font-weight: 700; font-size: 16px; letter-spacing: -0.02em; }
+  .cal-nav { display: flex; gap: 4px; }
+  .cal-nav button {
+    width: 32px; height: 32px; padding: 0;
+    background: transparent; color: var(--text-2);
+    border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+    display: grid; place-items: center; font-size: 14px;
+  }
+  .cal-nav button:hover { background: var(--surface-2); border-color: var(--border-strong); color: var(--text); }
+  .cal-nav button.today-btn { width: auto; padding: 0 12px; font-size: 12px; font-weight: 500; }
+
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-dow {
+    text-align: center; color: var(--muted); font-size: 10px;
+    text-transform: uppercase; letter-spacing: .08em; padding: 8px 0; font-weight: 600;
+  }
+  .cal-day {
+    min-height: 72px;
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 6px 8px; background: var(--surface);
+    cursor: pointer;
+    display: flex; flex-direction: column;
+    transition: all .15s;
+    position: relative; overflow: hidden;
+  }
+  .cal-day:hover { background: var(--surface-2); border-color: var(--border-strong); transform: translateY(-1px); }
+  .cal-day.other { opacity: .35; }
+  .cal-day.today .num { background: var(--brand); color: white; }
+  .cal-day.selected { border-color: var(--brand); background: var(--brand-soft); box-shadow: 0 0 0 2px var(--brand-soft); }
+  .cal-day .num {
+    font-size: 13px; font-weight: 600; color: var(--text);
+    line-height: 1;
+    padding: 4px 6px; border-radius: 6px;
+    align-self: flex-start;
+    min-width: 22px; text-align: center;
+  }
+  .cal-day.other .num { color: var(--muted); }
+  .cal-dots { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 6px; }
+  .cal-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .cal-count { margin-top: auto; font-size: 10px; color: var(--muted); font-weight: 500; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px;
+    padding-top: 16px; border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--muted); font-weight: 500;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  /* Day list */
+  .day-title-row {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin: 22px 0 12px;
+  }
+  .day-title-row h3 {
+    margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.02em;
+  }
+  .day-title-row .count { font-size: 12px; color: var(--muted); }
+
+  .slot {
+    padding: 12px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--surface);
+    margin-bottom: 8px; font-size: 13px;
+    display: grid; grid-template-columns: 56px 1fr auto; gap: 14px; align-items: center;
+    transition: all .15s;
+  }
+  .slot:hover { border-color: var(--border-strong); background: var(--surface-2); }
+  .slot .time {
+    font-weight: 700; font-size: 14px; color: var(--text);
+    line-height: 1.1;
+  }
+  .slot .time small { display: block; color: var(--muted); font-weight: 500; font-size: 11px; margin-top: 2px; }
+  .slot .who { font-weight: 600; color: var(--text); }
+  .slot .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 600; letter-spacing: .03em;
+    text-transform: uppercase;
+    border: 1px solid transparent;
+  }
+  .chip.level-1 { background: var(--l1-soft); color: var(--l1); }
+  .chip.level-2 { background: var(--l2-soft); color: var(--l2); }
+  .chip.level-3 { background: var(--l3-soft); color: var(--l3); }
+  .chip.level-4 { background: var(--l4-soft); color: var(--l4); }
+  .chip.level-5 { background: var(--l5-soft); color: var(--l5); }
+
+  .chip.status-Scheduled { background: var(--brand-soft); color: var(--brand); }
+  .chip.status-Completed { background: var(--good-soft); color: var(--good); }
+  .chip.status-Cancelled { background: var(--bad-soft); color: var(--bad); }
+  .chip.status-Postponed { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+
+  .status-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .status-picker button {
+    flex: 1; min-width: 0;
+    padding: 9px 10px; font-size: 12px; font-weight: 600;
+    background: var(--surface-2); color: var(--text-2);
+    border: 1px solid var(--border); border-radius: var(--radius-xs);
+    cursor: pointer; transition: all .15s;
+    margin: 0; width: auto;
+    font-family: inherit;
+  }
+  .status-picker button:hover { background: var(--surface); border-color: var(--border-strong); color: var(--text); transform: none; box-shadow: none; }
+  .status-picker button.active-Scheduled { background: var(--brand-soft); color: var(--brand); border-color: color-mix(in srgb, var(--brand) 40%, transparent); }
+  .status-picker button.active-Completed { background: var(--good-soft); color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+  .status-picker button.active-Cancelled { background: var(--bad-soft); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+  .status-picker button.active-Postponed { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+
+  .slot.is-Cancelled, .my-slot.is-Cancelled, tr.is-Cancelled td { opacity: .55; text-decoration: line-through; text-decoration-thickness: 1px; }
+  .slot.is-Completed .time, .my-slot.is-Completed .date-box { filter: saturate(.6); }
+  .cal-day .status-ring {
+    position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%;
+  }
+
+  /* Table */
+  .table-toolbar {
+    display: flex; gap: 10px; align-items: center; justify-content: space-between;
+    margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .table-toolbar .search { position: relative; min-width: 220px; }
+  .table-toolbar .search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted); }
+  .table-toolbar .search input { padding-left: 32px; }
+  .table-toolbar select { width: auto; padding: 9px 12px; font-size: 13px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left; padding: 10px 12px;
+    color: var(--muted); font-weight: 600; text-transform: uppercase;
+    font-size: 10px; letter-spacing: .08em;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody td {
+    padding: 14px 12px; border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tbody tr:hover td { background: var(--surface-2); }
+  tbody tr { transition: background .15s; cursor: pointer; }
+  .empty {
+    text-align: center; color: var(--muted);
+    padding: 40px 20px; font-size: 13px;
+  }
+  .empty-icon { width: 40px; height: 40px; margin: 0 auto 10px; color: var(--muted); opacity: .5; }
+
+  /* Modal / Drawer */
+  .drawer-backdrop {
+    position: fixed; inset: 0; background: rgba(15,23,42,.5);
+    backdrop-filter: blur(4px);
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s; z-index: 50;
+  }
+  .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: min(560px, 100%);
+    background: var(--surface); border-left: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(100%); transition: transform .28s cubic-bezier(.2,.8,.2,1);
+    z-index: 51; overflow-y: auto;
+  }
+  .drawer.open { transform: translateX(0); }
+  .drawer-header {
+    position: sticky; top: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    z-index: 1;
+  }
+  .drawer-header h3 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
+  .drawer-body { padding: 22px; }
+
+  .user-head {
+    display: flex; align-items: center; gap: 14px; margin-bottom: 18px;
+  }
+  .avatar {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--brand), var(--brand-accent, #1e5fd1));
+    color: white; font-weight: 700; font-size: 16px;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .user-head .info .name { font-weight: 700; font-size: 15px; }
+  .user-head .info .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  .kv { display: grid; grid-template-columns: 120px 1fr; gap: 8px 12px; margin: 12px 0 20px; font-size: 13px; }
+  .kv dt { color: var(--muted); font-weight: 500; }
+  .kv dd { margin: 0; color: var(--text); }
+
+  .section-title {
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .08em;
+    margin: 22px 0 10px; display: flex; align-items: center; gap: 6px;
+  }
+
+  .material-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: var(--radius-xs); margin-bottom: 6px;
+    background: var(--surface-2);
+    font-size: 13px;
+  }
+  .material-item .file-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--brand-soft); color: var(--brand);
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  .material-item .fname { font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .material-item .fsize { color: var(--muted); font-size: 11px; }
+  .material-item .fdelete { background: transparent; border: 0; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 6px; display: grid; place-items: center; }
+  .material-item .fdelete:hover { background: var(--bad-soft); color: var(--bad); }
+
+  .note-item {
+    padding: 12px 14px; border: 1px solid var(--border);
+    border-radius: var(--radius-xs); background: var(--surface-2);
+    margin-bottom: 8px; font-size: 13px; line-height: 1.55;
+  }
+  .note-item .note-date { font-size: 11px; color: var(--muted); margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .note-item .note-body { white-space: pre-wrap; color: var(--text); }
+
+  .upload-zone {
+    border: 1.5px dashed var(--border-strong); border-radius: var(--radius-xs);
+    padding: 22px; text-align: center; color: var(--muted);
+    transition: all .15s; cursor: pointer; background: var(--surface-2);
+    font-size: 13px;
+  }
+  .upload-zone:hover, .upload-zone.dragover { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+  .upload-zone svg { width: 22px; height: 22px; margin-bottom: 6px; display: block; margin-left: auto; margin-right: auto; }
+  .upload-zone input { display: none; }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 32px 20px; }
+
+  /* Progress card */
+  .progress-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  @media (max-width: 820px) { .progress-grid { grid-template-columns: 1fr; } }
+  .progress-col h3 { font-size: 13px; font-weight: 700; margin: 0 0 10px; letter-spacing:-.01em; color: var(--text-2); text-transform: uppercase; letter-spacing:.05em; font-size:11px; }
+  .progress-row {
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); margin-bottom: 8px;
+  }
+  .progress-row .prow-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .progress-row .prow-name { font-weight: 600; font-size: 13px; }
+  .progress-row .prow-meta { font-size: 11px; color: var(--muted); }
+  .bar {
+    height: 8px; background: var(--surface-2); border-radius: 999px;
+    overflow: hidden; position: relative;
+  }
+  .bar-fill {
+    position: absolute; inset: 0; background: linear-gradient(90deg, var(--brand), var(--brand-accent, var(--brand)));
+    border-radius: 999px; transition: width .4s cubic-bezier(.2,.8,.2,1);
+  }
+  .bar-breakdown { display: flex; gap: 3px; margin-top: 6px; height: 4px; }
+  .bar-breakdown > span { flex: 1; border-radius: 2px; background: var(--surface-2); }
+  .bar-breakdown > span.done { background: var(--good); }
+  .bar-breakdown > span.scheduled { background: var(--brand); }
+  .bar-breakdown > span.postponed { background: var(--warn); }
+  .bar-breakdown > span.cancelled { background: var(--bad); opacity: .6; }
+
+  /* View toggle */
+  .view-toggle {
+    display: inline-flex; background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 3px; gap: 2px;
+  }
+  .view-toggle button {
+    background: transparent; border: 0; cursor: pointer;
+    padding: 7px 14px; font-size: 12px; font-weight: 600;
+    color: var(--text-2); border-radius: 8px;
+    display: inline-flex; align-items: center; gap: 6px;
+    margin: 0; width: auto;
+    font-family: inherit;
+    transition: all .15s;
+  }
+  .view-toggle button:hover { color: var(--text); }
+  .view-toggle button.active {
+    background: var(--surface); color: var(--brand);
+    box-shadow: var(--shadow-sm);
+  }
+  .view-toggle svg { width: 14px; height: 14px; }
+
+  [data-view] { display: none; }
+  body.view-trainee [data-view="trainee"] { display: block; }
+  body.view-trainer [data-view="trainer"] { display: block; }
+  body.view-trainee main[data-view="trainee"],
+  body.view-trainer main[data-view="trainer"] { display: grid; }
+
+  .hero-tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--muted); margin-top: 12px;
+  }
+  .hero-tag .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 25%, transparent); }
+
+  .my-slot {
+    padding: 14px 16px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--surface);
+    margin-bottom: 10px; display: grid;
+    grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center;
+  }
+  .my-slot .date-box {
+    background: var(--brand-soft); color: var(--brand);
+    border-radius: 10px; text-align: center; padding: 8px;
+  }
+  .my-slot .date-box .m { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .my-slot .date-box .d { font-size: 20px; font-weight: 700; line-height: 1; margin-top: 2px; }
+
+  /* Auth screen */
+  .auth-screen {
+    position: fixed; inset: 0;
+    background: linear-gradient(135deg, #f2f4fb 0%, #e7ecfa 100%);
+    display: none; align-items: center; justify-content: center;
+    z-index: 70; padding: 20px;
+    overflow-y: auto;
+  }
+  [data-theme="dark"] .auth-screen { background: linear-gradient(135deg, #0b0f1a 0%, #0e1422 100%); }
+  body.not-authed .auth-screen { display: flex; }
+  body.not-authed > :not(.auth-screen):not(script) { display: none !important; }
+  .auth-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 32px;
+    box-shadow: var(--shadow-lg);
+    width: min(440px, 100%);
+  }
+  .auth-brand {
+    display: flex; align-items: center; gap: 12px;
+    justify-content: center; margin-bottom: 20px;
+  }
+  .auth-brand .brand-mark { width: 56px; height: 56px; }
+  .auth-brand-text { font-weight: 700; font-size: 16px; letter-spacing: -0.02em; }
+  .auth-brand-text small { display: block; color: var(--muted); font-size: 12px; font-weight: 500; }
+  .auth-tabs {
+    display: flex; background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 3px; gap: 2px; margin-bottom: 20px;
+  }
+  .auth-tabs button {
+    flex: 1; background: transparent; border: 0; cursor: pointer;
+    padding: 9px; font-size: 13px; font-weight: 600;
+    color: var(--text-2); border-radius: 8px;
+    margin: 0; font-family: inherit;
+    transition: all .15s;
+  }
+  .auth-tabs button:hover { color: var(--text); }
+  .auth-tabs button.active {
+    background: var(--surface); color: var(--brand);
+    box-shadow: var(--shadow-sm);
+  }
+  .auth-form { display: none; }
+  .auth-form.active { display: block; animation: fadeIn .2s ease-out; }
+  .auth-form .help { text-align: center; margin-top: 14px; }
+  .auth-err {
+    background: var(--bad-soft); color: var(--bad);
+    border: 1px solid color-mix(in srgb, var(--bad) 30%, transparent);
+    padding: 10px 12px; border-radius: var(--radius-xs);
+    font-size: 12px; margin-top: 12px; display: none;
+  }
+  .auth-err.show { display: block; }
+  .name-note {
+    background: color-mix(in srgb, var(--warn) 12%, transparent);
+    color: var(--warn);
+    border: 1px solid color-mix(in srgb, var(--warn) 25%, transparent);
+    padding: 9px 11px; border-radius: var(--radius-xs);
+    font-size: 11px; margin-top: 6px;
+    display: flex; align-items: flex-start; gap: 6px; line-height: 1.4;
+  }
+
+  .user-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 4px 8px 4px 4px; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    font-size: 12px; font-weight: 500; color: var(--text);
+  }
+  .user-chip .mini-avatar {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--brand), var(--brand-accent, #1e5fd1));
+    color: white; font-weight: 700; font-size: 10px;
+    display: grid; place-items: center;
+  }
+
+  /* Lock modal */
+  .lock-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(10,45,130,.45);
+    backdrop-filter: blur(6px);
+    display: none; align-items: center; justify-content: center;
+    z-index: 60;
+    animation: fadeIn .2s ease-out;
+  }
+  .lock-backdrop.open { display: flex; }
+  .lock-modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 28px;
+    box-shadow: var(--shadow-lg);
+    width: min(380px, calc(100% - 32px));
+    text-align: center;
+  }
+  .lock-modal .lock-icon {
+    width: 52px; height: 52px; border-radius: 14px;
+    background: var(--brand-soft); color: var(--brand);
+    display: grid; place-items: center; margin: 0 auto 14px;
+  }
+  .lock-modal h3 { margin: 0 0 6px; font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+  .lock-modal p { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+  .lock-modal input { text-align: center; font-size: 15px; letter-spacing: 2px; font-family: "JetBrains Mono", ui-monospace, monospace; }
+  .lock-modal .lock-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .lock-modal .lock-err { color: var(--bad); font-size: 12px; margin-top: 8px; min-height: 16px; }
+
+  /* Fade-in */
+  .fade-in { animation: fadeIn .3s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body class="view-trainee not-authed">
+
+<!-- Auth screen (sign up / log in) -->
+<div class="auth-screen" id="authScreen">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="48" fill="#0a2d82"/>
+          <circle cx="50" cy="50" r="41" fill="none" stroke="white" stroke-width="1.5"/>
+          <text x="50" y="62" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="34" fill="white" letter-spacing="-1">GPL</text>
+        </svg>
+      </div>
+      <div class="auth-brand-text">Guyana Power &amp; Light<small>VPMO Training Portal</small></div>
+    </div>
+
+    <div class="auth-tabs" role="tablist">
+      <button type="button" class="active" data-auth-tab="login">Log in</button>
+      <button type="button" data-auth-tab="signup">Sign up</button>
+    </div>
+
+    <!-- Login -->
+    <form class="auth-form active" id="loginForm" autocomplete="on" novalidate>
+      <label for="loginUser">Username</label>
+      <input id="loginUser" name="username" autocomplete="username" required placeholder="your.username" />
+      <label for="loginPass">Password</label>
+      <input id="loginPass" name="password" type="password" autocomplete="current-password" required placeholder="••••••••" />
+      <div class="auth-err" id="loginErr"></div>
+      <button type="submit" class="btn full">Log in</button>
+      <p class="help">Don't have an account? Click <strong>Sign up</strong> above.</p>
+    </form>
+
+    <!-- Signup -->
+    <form class="auth-form" id="signupForm" autocomplete="on" novalidate>
+      <label for="signupName">Full name (real name)</label>
+      <input id="signupName" name="fullName" required placeholder="e.g. Anita Persaud" autocomplete="name" />
+      <div class="name-note">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1px;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <span>Please use your <strong>real full name</strong> as it appears on your GPL records — training records and certificates will carry this name.</span>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="signupUser">Username</label>
+          <input id="signupUser" name="username" required placeholder="anita.persaud" pattern="[A-Za-z0-9._-]{3,}" autocomplete="username" />
+        </div>
+        <div>
+          <label for="signupEmail">Email</label>
+          <input id="signupEmail" name="email" type="email" required placeholder="anita@example.com" autocomplete="email" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="signupPhone">GPL phone</label>
+          <input id="signupPhone" name="phone" required inputmode="tel" placeholder="+592 555 0101" autocomplete="tel" />
+        </div>
+        <div>
+          <label for="signupUnit">Unit</label>
+          <select id="signupUnit" name="unit" required>
+            <option value="" disabled selected>Select…</option>
+            <option>Special Projects</option>
+            <option>Mechanical</option>
+            <option>Electrical</option>
+            <option>Program Manager</option>
+            <option value="T&amp;D">T&amp;D</option>
+          </select>
+        </div>
+      </div>
+
+      <label for="signupPass">Password (min 6 characters)</label>
+      <input id="signupPass" name="password" type="password" required minlength="6" placeholder="••••••••" autocomplete="new-password" />
+
+      <div class="auth-err" id="signupErr"></div>
+      <button type="submit" class="btn full">Create account</button>
+      <p class="help">Already have an account? Click <strong>Log in</strong> above.</p>
+    </form>
+  </div>
+</div>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-mark" aria-label="GPL logo">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+          <circle cx="50" cy="50" r="48" fill="#0a2d82"/>
+          <circle cx="50" cy="50" r="41" fill="none" stroke="white" stroke-width="1.5"/>
+          <text x="50" y="62" text-anchor="middle"
+                font-family="Arial Black, Arial, sans-serif"
+                font-weight="900" font-size="34" fill="white" letter-spacing="-1">GPL</text>
+        </svg>
+      </div>
+      <div>Guyana Power &amp; Light <span class="sub">· VPMO Training</span></div>
+    </div>
+    <div class="top-actions">
+      <div class="view-toggle" role="tablist" aria-label="Switch view">
+        <button type="button" class="active" data-view-btn="trainee" role="tab">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-3-3-3 3"/></svg>
+          Trainee
+        </button>
+        <button type="button" data-view-btn="trainer" role="tab">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Trainer
+        </button>
+      </div>
+      <span class="user-chip" id="userChip" style="display:none;">
+        <span class="mini-avatar" id="userChipAvatar">—</span>
+        <span id="userChipName">—</span>
+        <button type="button" class="icon-btn" id="logoutBtn" title="Log out" aria-label="Log out" style="width:24px;height:24px;border:0;background:transparent;color:var(--muted);">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </span>
+      <button class="icon-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">
+        <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+      <button class="icon-btn" id="exportBtn" title="Export CSV" aria-label="Export CSV">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<section class="hero" data-view="trainee">
+  <span class="eyebrow">● Trainee · Registration</span>
+  <h1>Book Your VPMO Training</h1>
+  <p>Register yourself or your unit, pick a training level, and reserve a window. After registering, open your booking to add study notes and materials.</p>
+  <div class="hero-tag"><span class="dot"></span> Your registrations are saved locally and visible below.</div>
+</section>
+
+<section class="hero" data-view="trainer">
+  <span class="eyebrow">● Trainer · Overview</span>
+  <h1>VPMO Training Dashboard</h1>
+  <p>Review every registration, browse the training calendar, and manage study materials across all units.</p>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Total Bookings</div><div class="stat-value" id="statTotal">0</div></div>
+    <div class="stat"><div class="stat-label">Upcoming</div><div class="stat-value" id="statUpcoming">0</div></div>
+    <div class="stat"><div class="stat-label">Units Enrolled</div><div class="stat-value" id="statUnits">0</div></div>
+    <div class="stat"><div class="stat-label">Total Attendees</div><div class="stat-value" id="statPeople">0</div></div>
+  </div>
+</section>
+
+<main data-view="trainee">
+  <section class="card" id="registerCard">
+    <h2>Book a Training Slot</h2>
+    <p class="subtitle">Pick a level and an available slot. Your name, email, phone and unit come from your profile.</p>
+
+    <form id="regForm" autocomplete="on" novalidate>
+      <div id="profileSummary" style="padding:12px 14px; border:1px solid var(--border); border-radius:var(--radius-xs); background:var(--surface-2); display:flex; align-items:center; gap:12px; margin-bottom:4px;">
+        <div class="avatar" style="width:36px;height:36px;font-size:13px;border-radius:10px;" id="profileAvatar">—</div>
+        <div style="flex:1; min-width:0;">
+          <div id="profileName" style="font-weight:600; font-size:13px;">—</div>
+          <div id="profileMeta" style="color:var(--muted); font-size:12px; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">—</div>
+        </div>
+      </div>
+      <!-- Hidden fields populated from profile -->
+      <input type="hidden" id="fullName" name="fullName" />
+      <input type="hidden" id="email" name="email" />
+      <input type="hidden" id="phone" name="phone" />
+      <input type="hidden" id="unit" name="unit" />
+
+      <div class="row">
+        <div>
+          <label for="level">Training level</label>
+          <select id="level" name="level" required>
+            <option value="Level 1 — Foundational">Level 1 — Foundational</option>
+            <option value="Level 2 — Core Onboarding">Level 2 — Core Onboarding</option>
+            <option value="Level 3 — Intermediate">Level 3 — Intermediate</option>
+            <option value="Level 4 — Advanced">Level 4 — Advanced</option>
+            <option value="Level 5 — Train the Trainer">Level 5 — Train the Trainer</option>
+          </select>
+        </div>
+        <div>
+          <label for="role">Your role</label>
+          <select id="role" name="role">
+            <option value="Member">Member (registering myself)</option>
+            <option value="UnitHead">Unit Head (registering my team)</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="memberBlock">
+        <label for="attendees">Attendees from unit</label>
+        <input id="attendees" name="attendees" type="number" min="1" max="100" value="1" />
+      </div>
+
+      <div id="unitHeadBlock" style="display:none;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin: 14px 0 6px;">
+          <label style="margin:0;">Team members you're sending</label>
+          <span id="teamCount" class="chip" style="background:var(--brand-soft); color:var(--brand);">0 people</span>
+        </div>
+        <div id="teamList"></div>
+        <div style="display:flex; gap:8px;">
+          <input id="newMemberName" placeholder="Full name" />
+          <button type="button" class="btn ghost" id="addMemberBtn" style="margin:0; padding: 10px 14px; white-space:nowrap;">+ Add</button>
+        </div>
+        <p class="help">List each team member by name. The total attendee count updates automatically. You can also add them later from the user drawer.</p>
+      </div>
+
+      <div class="row-3">
+        <div>
+          <label for="date">Date</label>
+          <input id="date" name="date" type="date" required />
+        </div>
+        <div>
+          <label for="time">Start time</label>
+          <input id="time" name="time" type="time" required />
+        </div>
+        <div>
+          <label for="duration">Duration</label>
+          <select id="duration" name="duration">
+            <option value="30">30 min</option>
+            <option value="45">45 min</option>
+            <option value="60" selected>60 min</option>
+            <option value="90">90 min</option>
+            <option value="120">120 min</option>
+          </select>
+        </div>
+      </div>
+
+      <input type="hidden" id="format" name="format" value="In-person" />
+
+      <label for="notes">Notes (optional)</label>
+      <textarea id="notes" name="notes" rows="2" placeholder="Anything the VPMO trainers should know"></textarea>
+
+      <div style="margin-top:16px; padding:12px 14px; border:1px solid color-mix(in srgb, var(--warn) 35%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); border-radius:var(--radius-xs); display:flex; gap:10px; align-items:flex-start; font-size:13px; color:var(--text);">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--warn); flex-shrink:0; margin-top:1px;"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+        <div>
+          <strong>Bring your work devices.</strong> Please come to training with <strong>both your work laptop and your work phone</strong>. You'll need them for hands-on exercises — sessions can't proceed without them.
+        </div>
+      </div>
+
+      <label style="display:flex; align-items:flex-start; gap:8px; margin-top:14px; cursor:pointer; font-size:12px; color:var(--text-2); text-transform:none; letter-spacing:0;">
+        <input type="checkbox" id="confirmDevices" required style="width:auto; margin:3px 0 0;" />
+        <span>I confirm I will bring my <strong>work laptop and work phone</strong> to this training session.</span>
+      </label>
+
+      <button type="submit" class="btn full">Confirm registration</button>
+      <div id="msg" class="msg" role="status" aria-live="polite"></div>
+      <p class="help">By registering, you confirm this slot is available for your unit to accept VPMO training. After registering, click your row in the table to attach study notes &amp; materials.</p>
+    </form>
+  </section>
+
+  <section class="card" id="myBookingsCard">
+    <h2>My Bookings</h2>
+    <p class="subtitle">Every slot you've registered on this device.</p>
+    <div id="myBookingsList"></div>
+  </section>
+</main>
+
+<main data-view="trainer">
+  <section class="card" id="calendarCard">
+    <h2>Training Calendar</h2>
+    <p class="subtitle">Color dots show the levels scheduled each day.</p>
+
+    <div class="cal-header">
+      <div class="cal-title" id="calTitle">—</div>
+      <div class="cal-nav">
+        <button type="button" id="prevMonth" aria-label="Previous month">‹</button>
+        <button type="button" class="today-btn" id="todayBtn">Today</button>
+        <button type="button" id="nextMonth" aria-label="Next month">›</button>
+      </div>
+    </div>
+
+    <div class="cal-grid" id="dowRow"></div>
+    <div class="cal-grid" id="calGrid" style="margin-top:4px;"></div>
+
+    <div class="legend">
+      <span><i style="background:var(--l1)"></i> L1 Foundational</span>
+      <span><i style="background:var(--l2)"></i> L2 Core</span>
+      <span><i style="background:var(--l3)"></i> L3 Intermediate</span>
+      <span><i style="background:var(--l4)"></i> L4 Advanced</span>
+      <span><i style="background:var(--l5)"></i> L5 Trainer</span>
+    </div>
+
+    <div class="day-title-row">
+      <h3 id="dayTitle">Select a day</h3>
+      <span class="count" id="dayCount"></span>
+    </div>
+    <div id="dayList"><div class="empty">Pick a date on the calendar above.</div></div>
+  </section>
+
+  <section class="card full" id="progressCard">
+    <h2>Training Progress</h2>
+    <p class="subtitle">Completion status per person and per unit — based on Completed vs total registered sessions.</p>
+    <div class="progress-grid">
+      <div class="progress-col">
+        <h3>By Person</h3>
+        <div id="progressPeople"></div>
+      </div>
+      <div class="progress-col">
+        <h3>By Unit</h3>
+        <div id="progressUnits"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card full">
+    <div class="table-toolbar">
+      <div>
+        <h2 style="margin:0;">Registrations</h2>
+        <p class="subtitle" style="margin-top:2px;">Click a row to manage notes &amp; materials.</p>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="search" id="filter" placeholder="Search names, emails, units…" />
+        </div>
+        <select id="levelFilter">
+          <option value="">All levels</option>
+          <option>Level 1 — Foundational</option>
+          <option>Level 2 — Core Onboarding</option>
+          <option>Level 3 — Intermediate</option>
+          <option>Level 4 — Advanced</option>
+          <option>Level 5 — Train the Trainer</option>
+        </select>
+        <button class="btn ghost" id="clearAll" type="button">Clear all</button>
+      </div>
+    </div>
+    <div id="tableWrap"></div>
+  </section>
+</main>
+
+<!-- Password lock for Trainer view -->
+<div class="lock-backdrop" id="lockBackdrop" role="dialog" aria-modal="true" aria-labelledby="lockTitle">
+  <div class="lock-modal">
+    <div class="lock-icon">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    </div>
+    <h3 id="lockTitle">Trainer Access</h3>
+    <p>Enter the trainer password to view the dashboard.</p>
+    <input type="password" id="lockInput" autocomplete="off" placeholder="••••••••" autofocus />
+    <div class="lock-err" id="lockErr"></div>
+    <div class="lock-actions">
+      <button type="button" class="btn ghost" id="lockCancel" style="flex:1; margin:0;">Cancel</button>
+      <button type="button" class="btn" id="lockSubmit" style="flex:1; margin:0;">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<!-- User drawer -->
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-header">
+    <h3>User Details</h3>
+    <button class="icon-btn" id="closeDrawer" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>
+
+<footer>GPL · VPMO Training Scheduler · Data stored locally in your browser</footer>
+
+<script>
+  const STORAGE_KEY = "gpl.vpmo.bookings.v3";
+  const THEME_KEY = "gpl.vpmo.theme";
+  const $ = (s) => document.querySelector(s);
+
+  const LEVELS = {
+    "Level 1 — Foundational": { n: 1, cls: "level-1" },
+    "Level 2 — Core Onboarding": { n: 2, cls: "level-2" },
+    "Level 3 — Intermediate": { n: 3, cls: "level-3" },
+    "Level 4 — Advanced": { n: 4, cls: "level-4" },
+    "Level 5 — Train the Trainer": { n: 5, cls: "level-5" }
+  };
+  const levelInfo = (l) => LEVELS[l] || { n: 0, cls: "" };
+
+  const today = new Date();
+  let viewYear = today.getFullYear();
+  let viewMonth = today.getMonth();
+  let selectedDate = toISO(today);
+  let activeUserId = null;
+  let pendingTeam = []; // names typed before form submit
+
+  // theme
+  (function initTheme() {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === "dark") document.documentElement.setAttribute("data-theme", "dark");
+  })();
+  $("#themeBtn").addEventListener("click", () => {
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    if (isDark) {
+      document.documentElement.removeAttribute("data-theme");
+      localStorage.setItem(THEME_KEY, "light");
+    } else {
+      document.documentElement.setAttribute("data-theme", "dark");
+      localStorage.setItem(THEME_KEY, "dark");
+    }
+  });
+
+  (function initDefaults() {
+    const iso = toISO(new Date());
+    $("#date").min = iso;
+    $("#date").value = iso;
+    $("#time").value = "10:00";
+  })();
+
+  function toISO(d) { const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,"0"); const da=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${da}`; }
+  function load() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
+  function save(list) { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); }
+  function escape(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+  function validEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
+  function validPhone(s) { return /^[+\d][\d\s\-().]{5,}$/.test(s); }
+  function initials(name) { return name.trim().split(/\s+/).slice(0,2).map(s => s[0]?.toUpperCase() || "").join(""); }
+  function fmtBytes(n) { if(!n) return "0 B"; const u=["B","KB","MB","GB"]; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++;} return `${n.toFixed(i?1:0)} ${u[i]}`; }
+  function toMin(t) { const [h,m] = t.split(":").map(Number); return h*60+m; }
+  function slotsOverlap(a, b) {
+    if (a.date !== b.date) return false;
+    const aS = toMin(a.time), aE = aS + Number(a.duration);
+    const bS = toMin(b.time), bE = bS + Number(b.duration);
+    return aS < bE && bS < aE;
+  }
+
+  function showMsg(text, kind) {
+    const msg = $("#msg");
+    msg.className = "msg " + kind;
+    msg.textContent = text;
+    if (kind === "ok") setTimeout(() => { msg.className = "msg"; msg.textContent = ""; }, 3500);
+  }
+
+  /* ----- Stats ----- */
+  function renderStats() {
+    const list = load();
+    const todayISO = toISO(new Date());
+    $("#statTotal").textContent = list.length;
+    $("#statUpcoming").textContent = list.filter(b => b.date >= todayISO).length;
+    $("#statUnits").textContent = new Set(list.map(b => b.unit.toLowerCase())).size;
+    $("#statPeople").textContent = list.reduce((s,b) => s + (Number(b.attendees)||1), 0);
+  }
+
+  /* ----- Calendar ----- */
+  (function buildDowRow() {
+    const dows = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    $("#dowRow").innerHTML = dows.map(d => `<div class="cal-dow">${d}</div>`).join("");
+  })();
+
+  function renderCalendar() {
+    const first = new Date(viewYear, viewMonth, 1);
+    const startDow = first.getDay();
+    const daysInMonth = new Date(viewYear, viewMonth+1, 0).getDate();
+    $("#calTitle").textContent = first.toLocaleString(undefined, { month: "long", year: "numeric" });
+
+    const todayISO = toISO(today);
+    const bookings = load();
+    const byDate = bookings.reduce((m,b) => ((m[b.date]=m[b.date]||[]).push(b), m), {});
+
+    const cells = [];
+    for (let i=0; i<startDow; i++) {
+      const d = new Date(viewYear, viewMonth, 1-(startDow-i));
+      cells.push({ date: d, other: true });
+    }
+    for (let d=1; d<=daysInMonth; d++) cells.push({ date: new Date(viewYear, viewMonth, d), other: false });
+    while (cells.length % 7 !== 0) {
+      const last = cells[cells.length-1].date;
+      const nd = new Date(last); nd.setDate(last.getDate()+1);
+      cells.push({ date: nd, other: true });
+    }
+
+    $("#calGrid").innerHTML = cells.map(c => {
+      const iso = toISO(c.date);
+      const list = byDate[iso] || [];
+      const dots = [...new Set(list.map(b => levelInfo(b.level).n))].sort()
+        .slice(0,5).map(n => `<span class="cal-dot" style="background:var(--l${n})"></span>`).join("");
+      const classes = ["cal-day", c.other ? "other" : "", iso===todayISO ? "today" : "", iso===selectedDate ? "selected" : ""].filter(Boolean).join(" ");
+      const count = list.length ? `<div class="cal-count">${list.length} slot${list.length>1?"s":""}</div>` : "";
+      return `<div class="${classes}" data-iso="${iso}"><div class="num">${c.date.getDate()}</div><div class="cal-dots">${dots}</div>${count}</div>`;
+    }).join("");
+
+    $("#calGrid").querySelectorAll(".cal-day").forEach(el => {
+      el.addEventListener("click", () => {
+        selectedDate = el.dataset.iso;
+        $("#date").value = selectedDate;
+        renderCalendar(); renderDay();
+      });
+    });
+  }
+
+  function renderDay() {
+    const d = new Date(selectedDate + "T00:00:00");
+    $("#dayTitle").textContent = d.toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric" });
+    const list = load().filter(b => b.date === selectedDate).sort((a,b) => a.time.localeCompare(b.time));
+    $("#dayCount").textContent = list.length ? `${list.length} booking${list.length>1?"s":""}` : "";
+    if (list.length === 0) {
+      $("#dayList").innerHTML = `<div class="empty">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        No bookings this day.</div>`;
+      return;
+    }
+    $("#dayList").innerHTML = list.map(b => {
+      const lv = levelInfo(b.level);
+      const st = b.status || "Scheduled";
+      return `<div class="slot fade-in is-${st}" data-id="${b.id}">
+        <div class="time">${b.time}<small>${b.duration}m</small></div>
+        <div>
+          <div class="who">${escape(b.fullName)} <span class="chip ${lv.cls}">L${lv.n}</span> <span class="chip status-${st}">${st}</span></div>
+          <div class="meta">${escape(b.unit)} · ${escape(b.format)} · ${Number(b.attendees)||1} attendees</div>
+        </div>
+        <button class="btn ghost sm">Open</button>
+      </div>`;
+    }).join("");
+    $("#dayList").querySelectorAll(".slot").forEach(el => {
+      el.addEventListener("click", () => openDrawer(el.dataset.id));
+    });
+  }
+
+  $("#prevMonth").addEventListener("click", () => { viewMonth--; if (viewMonth<0){viewMonth=11;viewYear--;} renderCalendar(); });
+  $("#nextMonth").addEventListener("click", () => { viewMonth++; if (viewMonth>11){viewMonth=0;viewYear++;} renderCalendar(); });
+  $("#todayBtn").addEventListener("click", () => {
+    viewYear = today.getFullYear(); viewMonth = today.getMonth();
+    selectedDate = toISO(today); $("#date").value = selectedDate;
+    renderCalendar(); renderDay();
+  });
+
+  /* ----- Table ----- */
+  function renderTable() {
+    const list = load();
+    const q = ($("#filter").value || "").trim().toLowerCase();
+    const lv = $("#levelFilter").value;
+    let filtered = list;
+    if (q) filtered = filtered.filter(b => [b.fullName,b.email,b.unit,b.phone,b.level].join(" ").toLowerCase().includes(q));
+    if (lv) filtered = filtered.filter(b => b.level === lv);
+
+    const wrap = $("#tableWrap");
+    if (filtered.length === 0) {
+      wrap.innerHTML = `<div class="empty">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m22 11-3 3-3-3"/></svg>
+        ${list.length === 0 ? "No registrations yet. Fill out the form to create the first." : "No results match your filters."}
+      </div>`;
+      return;
+    }
+    filtered.sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
+    wrap.innerHTML = `<table>
+      <thead><tr>
+        <th>When</th><th>Status</th><th>Level</th><th>Who</th><th>Unit</th>
+        <th>Contact</th><th>Attendees</th><th>Materials</th>
+      </tr></thead>
+      <tbody>
+        ${filtered.map(b => {
+          const lv = levelInfo(b.level);
+          const st = b.status || "Scheduled";
+          const matCount = (b.materials?.length || 0) + (b.studyNotes?.length || 0);
+          return `<tr data-id="${b.id}" class="fade-in is-${st}">
+            <td><div style="font-weight:600;">${b.date}</div><div style="color:var(--muted); font-size:12px;">${b.time} · ${b.duration}m</div></td>
+            <td><span class="chip status-${st}">${st}</span></td>
+            <td><span class="chip ${lv.cls}">L${lv.n}</span></td>
+            <td>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div class="avatar" style="width:32px;height:32px;font-size:12px;border-radius:9px;">${escape(initials(b.fullName))}</div>
+                <div>
+                  <div style="font-weight:600; display:flex; align-items:center; gap:6px;">${escape(b.fullName)}${b.role === "UnitHead" ? `<span class="chip" style="background:var(--brand-soft); color:var(--brand);">Head · ${(b.teamMembers||[]).length}</span>` : ""}</div>
+                  <div style="color:var(--muted); font-size:12px;">${escape(b.format)}</div>
+                </div>
+              </div>
+            </td>
+            <td>${escape(b.unit)}</td>
+            <td><div style="font-size:12px;">${escape(b.email)}</div><div style="color:var(--muted); font-size:12px;">${escape(b.phone)}</div></td>
+            <td>${Number(b.attendees)||1}</td>
+            <td>${matCount ? `<span class="chip" style="background:var(--brand-soft); color:var(--brand);">${matCount} item${matCount>1?"s":""}</span>` : `<span style="color:var(--muted); font-size:12px;">None</span>`}</td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>`;
+    wrap.querySelectorAll("tr[data-id]").forEach(el => el.addEventListener("click", () => openDrawer(el.dataset.id)));
+  }
+
+  /* ----- Drawer: user detail + materials + notes ----- */
+  function openDrawer(id) {
+    activeUserId = id;
+    const user = load().find(b => b.id === id);
+    if (!user) return;
+    const lv = levelInfo(user.level);
+    $("#drawerBody").innerHTML = `
+      <div class="user-head">
+        <div class="avatar">${escape(initials(user.fullName))}</div>
+        <div class="info">
+          <div class="name">${escape(user.fullName)} <span class="chip ${lv.cls}" style="margin-left:4px;">L${lv.n}</span></div>
+          <div class="sub">${escape(user.unit)} · ${escape(user.email)}</div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:0;">Status</div>
+      <div class="status-picker" id="statusPicker" data-current="${user.status || 'Scheduled'}">
+        ${["Scheduled","Completed","Postponed","Cancelled"].map(s =>
+          `<button type="button" data-status="${s}" class="${(user.status || 'Scheduled') === s ? 'active-' + s : ''}">${s}</button>`
+        ).join("")}
+      </div>
+      <div id="postponeRow" style="display:${user.status === 'Postponed' ? 'flex' : 'none'}; gap:8px; margin-top:10px;">
+        <input type="date" id="postponeDate" value="${user.postponedTo || ''}" style="flex:1;" />
+        <input type="time" id="postponeTime" value="${user.postponedTime || user.time || ''}" style="flex:1;" />
+      </div>
+      ${user.completedAt ? `<p class="help" style="margin-top:8px;">Completed on ${new Date(user.completedAt).toLocaleString(undefined, { dateStyle:"medium", timeStyle:"short" })}</p>` : ""}
+      ${user.cancelledAt ? `<p class="help" style="margin-top:8px;">Cancelled on ${new Date(user.cancelledAt).toLocaleDateString(undefined, { dateStyle:"medium" })}</p>` : ""}
+
+      <dl class="kv" style="margin-top:18px;">
+        <dt>Role</dt><dd>${user.role === "UnitHead" ? `<span class="chip" style="background:var(--brand-soft); color:var(--brand);">Unit Head</span>` : "Member"}</dd>
+        <dt>Phone</dt><dd class="mono">${escape(user.phone)}</dd>
+        <dt>Scheduled</dt><dd>${user.date} at ${user.time} (${user.duration}m)${user.status === 'Postponed' && user.postponedTo ? ` → <strong>${user.postponedTo}${user.postponedTime ? ' at ' + user.postponedTime : ''}</strong>` : ''}</dd>
+        <dt>Format</dt><dd>${escape(user.format)}</dd>
+        <dt>Level</dt><dd>${escape(user.level)}</dd>
+        <dt>Attendees</dt><dd>${Number(user.attendees)||1}</dd>
+        ${user.notes ? `<dt>Notes</dt><dd>${escape(user.notes)}</dd>` : ""}
+      </dl>
+
+      ${user.role === "UnitHead" ? `
+        <div class="section-title">👥 Team Members Being Sent <span style="margin-left:auto; color:var(--muted); font-weight:500; text-transform:none; letter-spacing:0;">${(user.teamMembers||[]).length} total</span></div>
+        <div id="teamMembersList"></div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <input id="drawerMemberName" placeholder="Add another team member" />
+          <button class="btn sm" id="drawerAddMember" style="margin:0; padding:8px 14px; white-space:nowrap;">+ Add</button>
+        </div>
+      ` : ""}
+
+      <div class="section-title">📝 Study Notes</div>
+      <textarea id="newNote" rows="3" placeholder="Add a study note for this user (pre-reading, topics to cover, homework…)"></textarea>
+      <button class="btn sm" id="addNoteBtn" style="margin-top:8px; padding: 8px 14px;">Add note</button>
+      <div id="notesList" style="margin-top:14px;"></div>
+
+      <div class="section-title">📎 Study Materials</div>
+      <label class="upload-zone" id="uploadZone">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div><strong style="color:var(--text);">Click to upload</strong> or drag &amp; drop</div>
+        <div style="margin-top:4px; font-size:11px;">PDF, DOCX, PPTX, images — up to 4 MB each</div>
+        <input type="file" id="fileInput" multiple />
+      </label>
+      <div id="matList" style="margin-top:14px;"></div>
+
+      <div style="display:flex; gap:8px; margin-top:22px; padding-top:16px; border-top:1px solid var(--border);">
+        <button class="btn ghost" id="downloadZip" style="flex:1;">Export user data</button>
+        <button class="btn danger" id="removeUser" style="flex:1;">Remove booking</button>
+      </div>
+    `;
+    renderDrawerLists();
+    attachDrawerEvents();
+    $("#drawer").classList.add("open");
+    $("#drawer").setAttribute("aria-hidden", "false");
+    $("#drawerBackdrop").classList.add("open");
+  }
+
+  function closeDrawer() {
+    activeUserId = null;
+    $("#drawer").classList.remove("open");
+    $("#drawer").setAttribute("aria-hidden", "true");
+    $("#drawerBackdrop").classList.remove("open");
+  }
+  $("#closeDrawer").addEventListener("click", closeDrawer);
+  $("#drawerBackdrop").addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+
+  function renderDrawerLists() {
+    const user = load().find(b => b.id === activeUserId);
+    if (!user) return;
+    const notes = user.studyNotes || [];
+    const mats = user.materials || [];
+
+    if (user.role === "UnitHead" && $("#teamMembersList")) {
+      const team = user.teamMembers || [];
+      $("#teamMembersList").innerHTML = team.length === 0
+        ? `<div class="empty" style="padding:14px; font-size:12px;">No team members listed yet.</div>`
+        : team.map(m => `
+          <div class="material-item fade-in" style="margin-bottom:6px;">
+            <div class="file-icon" style="background:var(--brand-soft); color:var(--brand); font-weight:700; font-size:11px;">${escape(initials(m.name))}</div>
+            <div class="fname">${escape(m.name)}</div>
+            <button class="fdelete" data-team-id="${m.id}" title="Remove">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>`).join("");
+
+      $("#teamMembersList").querySelectorAll("[data-team-id]").forEach(b => b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const list = load();
+        const u = list.find(x => x.id === activeUserId);
+        u.teamMembers = (u.teamMembers || []).filter(m => m.id !== b.dataset.teamId);
+        u.attendees = u.teamMembers.length;
+        save(list); renderAll(); renderDrawerLists();
+      }));
+
+      const addBtn = $("#drawerAddMember");
+      const addInput = $("#drawerMemberName");
+      const addMember = () => {
+        const name = addInput.value.trim();
+        if (!name) return;
+        const list = load();
+        const u = list.find(x => x.id === activeUserId);
+        u.teamMembers = u.teamMembers || [];
+        if (u.teamMembers.some(m => m.name.toLowerCase() === name.toLowerCase())) return;
+        u.teamMembers.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()),
+          name
+        });
+        u.attendees = u.teamMembers.length;
+        save(list); addInput.value = ""; addInput.focus();
+        renderAll(); renderDrawerLists();
+      };
+      addBtn.onclick = addMember;
+      addInput.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); addMember(); } };
+    }
+
+    $("#notesList").innerHTML = notes.length === 0
+      ? `<div class="empty" style="padding:16px;">No notes yet.</div>`
+      : notes.map(n => `
+        <div class="note-item fade-in">
+          <div class="note-date">
+            <span>${new Date(n.createdAt).toLocaleString(undefined, { dateStyle:"medium", timeStyle:"short" })}</span>
+            <button class="fdelete" data-note-id="${n.id}" title="Delete note" style="border:0;background:transparent;cursor:pointer;color:var(--muted);">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+          <div class="note-body">${escape(n.text)}</div>
+        </div>`).join("");
+
+    $("#matList").innerHTML = mats.length === 0 ? "" : mats.map(m => `
+      <div class="material-item fade-in">
+        <div class="file-icon">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div class="fname" title="${escape(m.name)}">${escape(m.name)}</div>
+        <div class="fsize">${fmtBytes(m.size)}</div>
+        <a href="${m.data}" download="${escape(m.name)}" class="fdelete" title="Download" style="color:var(--brand);">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+        <button class="fdelete" data-mat-id="${m.id}" title="Remove">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>`).join("");
+
+    $("#notesList").querySelectorAll("[data-note-id]").forEach(b => b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const list = load();
+      const u = list.find(x => x.id === activeUserId);
+      u.studyNotes = (u.studyNotes || []).filter(n => n.id !== b.dataset.noteId);
+      save(list); renderAll(); renderDrawerLists();
+    }));
+    $("#matList").querySelectorAll("[data-mat-id]").forEach(b => b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const list = load();
+      const u = list.find(x => x.id === activeUserId);
+      u.materials = (u.materials || []).filter(m => m.id !== b.dataset.matId);
+      save(list); renderAll(); renderDrawerLists();
+    }));
+  }
+
+  function attachDrawerEvents() {
+    $("#statusPicker")?.querySelectorAll("[data-status]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const status = btn.dataset.status;
+        const list = load();
+        const u = list.find(x => x.id === activeUserId);
+        u.status = status;
+        if (status === "Completed") u.completedAt = new Date().toISOString();
+        if (status === "Cancelled") u.cancelledAt = new Date().toISOString();
+        if (status === "Scheduled") { delete u.completedAt; delete u.cancelledAt; delete u.postponedTo; delete u.postponedTime; }
+        save(list);
+        renderAll();
+        openDrawer(activeUserId);
+      });
+    });
+    ["postponeDate","postponeTime"].forEach(id => {
+      $("#" + id)?.addEventListener("change", () => {
+        const list = load();
+        const u = list.find(x => x.id === activeUserId);
+        u.postponedTo = $("#postponeDate").value;
+        u.postponedTime = $("#postponeTime").value;
+        save(list); renderAll();
+      });
+    });
+
+    $("#addNoteBtn").addEventListener("click", () => {
+      const text = $("#newNote").value.trim();
+      if (!text) return;
+      const list = load();
+      const u = list.find(x => x.id === activeUserId);
+      u.studyNotes = u.studyNotes || [];
+      u.studyNotes.unshift({
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()),
+        text, createdAt: new Date().toISOString()
+      });
+      save(list); $("#newNote").value = ""; renderAll(); renderDrawerLists();
+    });
+
+    const zone = $("#uploadZone");
+    const input = $("#fileInput");
+    input.addEventListener("change", (e) => handleFiles(e.target.files));
+    ["dragenter","dragover"].forEach(ev => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add("dragover"); }));
+    ["dragleave","drop"].forEach(ev => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove("dragover"); }));
+    zone.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
+
+    $("#removeUser").addEventListener("click", () => {
+      if (!confirm("Remove this booking and all attached notes/materials?")) return;
+      save(load().filter(b => b.id !== activeUserId));
+      closeDrawer(); renderAll();
+    });
+
+    $("#downloadZip").addEventListener("click", () => {
+      const user = load().find(b => b.id === activeUserId);
+      const json = JSON.stringify(user, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${user.fullName.replace(/\s+/g,"_")}-training.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  }
+
+  function handleFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (files.length === 0) return;
+    const list = load();
+    const u = list.find(x => x.id === activeUserId);
+    u.materials = u.materials || [];
+    const MAX = 4 * 1024 * 1024;
+    let pending = files.length;
+    files.forEach(f => {
+      if (f.size > MAX) {
+        alert(`${f.name} is larger than 4 MB — skipped.`);
+        if (--pending === 0) { save(list); renderAll(); renderDrawerLists(); }
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        u.materials.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()),
+          name: f.name, size: f.size, type: f.type,
+          data: reader.result, uploadedAt: new Date().toISOString()
+        });
+        if (--pending === 0) { save(list); renderAll(); renderDrawerLists(); }
+      };
+      reader.readAsDataURL(f);
+    });
+  }
+
+  /* ----- Render all ----- */
+  /* ----- My Bookings (trainee) ----- */
+  function renderMyBookings() {
+    const wrap = $("#myBookingsList");
+    if (!wrap) return;
+    const email = ($("#email")?.value || localStorage.getItem("gpl.vpmo.lastEmail") || "").toLowerCase();
+    const list = load();
+    const mine = email ? list.filter(b => b.email.toLowerCase() === email) : list;
+    mine.sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
+    if (mine.length === 0) {
+      wrap.innerHTML = `<div class="empty">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        ${email ? "You have no bookings yet." : "Register above to see your bookings here."}
+      </div>`;
+      return;
+    }
+    wrap.innerHTML = mine.map(b => {
+      const lv = levelInfo(b.level);
+      const st = b.status || "Scheduled";
+      const d = new Date(b.date + "T00:00:00");
+      const mon = d.toLocaleString(undefined, { month: "short" });
+      return `<div class="my-slot fade-in is-${st}" data-id="${b.id}">
+        <div class="date-box"><div class="m">${mon}</div><div class="d">${d.getDate()}</div></div>
+        <div>
+          <div style="font-weight:600; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">${escape(b.level)} <span class="chip ${lv.cls}">L${lv.n}</span> <span class="chip status-${st}">${st}</span></div>
+          <div style="color:var(--muted); font-size:12px; margin-top:2px;">${b.time} · ${b.duration}m · ${escape(b.format)} · ${escape(b.unit)}</div>
+        </div>
+        <button class="btn ghost sm">Open</button>
+      </div>`;
+    }).join("");
+    wrap.querySelectorAll(".my-slot").forEach(el => el.addEventListener("click", () => openDrawer(el.dataset.id)));
+  }
+
+  /* ----- Progress tracker ----- */
+  function renderProgress() {
+    const list = load();
+    const peopleWrap = $("#progressPeople");
+    const unitsWrap = $("#progressUnits");
+    if (!peopleWrap || !unitsWrap) return;
+
+    const groupBy = (key) => {
+      const map = {};
+      list.forEach(b => {
+        const k = typeof key === "function" ? key(b) : b[key];
+        if (!k) return;
+        if (!map[k]) map[k] = { key: k, sample: b, total: 0, Completed: 0, Scheduled: 0, Postponed: 0, Cancelled: 0, people: new Set(), units: new Set() };
+        const st = b.status || "Scheduled";
+        map[k].total++;
+        map[k][st] = (map[k][st] || 0) + 1;
+        map[k].people.add(b.email.toLowerCase());
+        map[k].units.add(b.unit);
+      });
+      return Object.values(map);
+    };
+
+    const renderRow = (label, sub, g) => {
+      const done = g.Completed || 0;
+      const pct = g.total ? Math.round((done / g.total) * 100) : 0;
+      const segs = [];
+      for (let i=0; i<g.total; i++) {
+        if (i < g.Completed) segs.push("done");
+        else if (i < g.Completed + g.Scheduled) segs.push("scheduled");
+        else if (i < g.Completed + g.Scheduled + g.Postponed) segs.push("postponed");
+        else segs.push("cancelled");
+      }
+      return `<div class="progress-row fade-in">
+        <div class="prow-head">
+          <div>
+            <div class="prow-name">${escape(label)}</div>
+            <div class="prow-meta">${escape(sub)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-weight:700; font-size:14px;">${pct}%</div>
+            <div class="prow-meta">${done}/${g.total} complete</div>
+          </div>
+        </div>
+        <div class="bar"><div class="bar-fill" style="width:${pct}%;"></div></div>
+        <div class="bar-breakdown">${segs.map(s => `<span class="${s}"></span>`).join("")}</div>
+        <div class="prow-meta" style="margin-top:8px; display:flex; gap:10px; flex-wrap:wrap;">
+          ${g.Completed ? `<span style="color:var(--good);">● ${g.Completed} done</span>` : ""}
+          ${g.Scheduled ? `<span style="color:var(--brand);">● ${g.Scheduled} scheduled</span>` : ""}
+          ${g.Postponed ? `<span style="color:var(--warn);">● ${g.Postponed} postponed</span>` : ""}
+          ${g.Cancelled ? `<span style="color:var(--bad);">● ${g.Cancelled} cancelled</span>` : ""}
+        </div>
+      </div>`;
+    };
+
+    const peopleGroups = groupBy(b => b.email.toLowerCase())
+      .sort((a,b) => (b.Completed/b.total||0) - (a.Completed/a.total||0) || b.total - a.total);
+    const unitGroups = groupBy("unit")
+      .sort((a,b) => (b.Completed/b.total||0) - (a.Completed/a.total||0));
+
+    peopleWrap.innerHTML = peopleGroups.length === 0
+      ? `<div class="empty" style="padding:20px; font-size:12px;">No registrations yet.</div>`
+      : peopleGroups.map(g => renderRow(g.sample.fullName, `${g.sample.unit} · ${g.sample.email}`, g)).join("");
+
+    unitsWrap.innerHTML = unitGroups.length === 0
+      ? `<div class="empty" style="padding:20px; font-size:12px;">No registrations yet.</div>`
+      : unitGroups.map(g => renderRow(g.key, `${g.people.size} ${g.people.size === 1 ? "person" : "people"}`, g)).join("");
+  }
+
+  function renderAll() { renderStats(); renderCalendar(); renderDay(); renderTable(); renderMyBookings(); renderProgress(); }
+
+  /* ----- Auth (signup / login) ----- */
+  const USERS_KEY = "gpl.vpmo.users";
+  const CURRENT_USER_KEY = "gpl.vpmo.currentUser";
+
+  function loadUsers() { try { return JSON.parse(localStorage.getItem(USERS_KEY)) || []; } catch { return []; } }
+  function saveUsers(u) { localStorage.setItem(USERS_KEY, JSON.stringify(u)); }
+  async function hash(s) {
+    const data = new TextEncoder().encode(s);
+    const buf = await crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+  }
+
+  function currentUser() {
+    const u = localStorage.getItem(CURRENT_USER_KEY);
+    if (!u) return null;
+    return loadUsers().find(x => x.username === u) || null;
+  }
+
+  function renderUserChip() {
+    const u = currentUser();
+    const chip = $("#userChip");
+    if (u) {
+      chip.style.display = "inline-flex";
+      $("#userChipAvatar").textContent = initials(u.fullName);
+      $("#userChipName").textContent = u.fullName;
+    } else {
+      chip.style.display = "none";
+    }
+  }
+
+  function applyAuthedState() {
+    const u = currentUser();
+    document.body.classList.toggle("not-authed", !u);
+    if (u) {
+      // Populate hidden fields — profile is source of truth, no re-entry needed
+      if ($("#fullName")) $("#fullName").value = u.fullName;
+      if ($("#email")) $("#email").value = u.email;
+      if ($("#phone")) $("#phone").value = u.phone;
+      if ($("#unit")) $("#unit").value = u.unit;
+      // Profile summary card
+      if ($("#profileAvatar")) $("#profileAvatar").textContent = initials(u.fullName);
+      if ($("#profileName")) $("#profileName").textContent = u.fullName;
+      if ($("#profileMeta")) $("#profileMeta").textContent = `${u.unit} · ${u.email} · ${u.phone}`;
+      localStorage.setItem("gpl.vpmo.lastEmail", u.email.toLowerCase());
+    }
+    renderUserChip();
+    renderAll();
+  }
+
+  function showAuthErr(id, msg) {
+    const el = $("#" + id);
+    el.textContent = msg;
+    el.classList.add("show");
+  }
+  function clearAuthErr(id) {
+    const el = $("#" + id);
+    el.textContent = ""; el.classList.remove("show");
+  }
+
+  document.querySelectorAll("[data-auth-tab]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.authTab;
+      document.querySelectorAll("[data-auth-tab]").forEach(b => b.classList.toggle("active", b === btn));
+      $("#loginForm").classList.toggle("active", tab === "login");
+      $("#signupForm").classList.toggle("active", tab === "signup");
+      clearAuthErr("loginErr"); clearAuthErr("signupErr");
+    });
+  });
+
+  $("#loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearAuthErr("loginErr");
+    const username = $("#loginUser").value.trim().toLowerCase();
+    const password = $("#loginPass").value;
+    if (!username || !password) return showAuthErr("loginErr", "Enter your username and password.");
+    const users = loadUsers();
+    const user = users.find(u => u.username === username);
+    if (!user) return showAuthErr("loginErr", "No account found with that username.");
+    const ph = await hash(password + "::" + user.salt);
+    if (ph !== user.passwordHash) return showAuthErr("loginErr", "Wrong password. Try again.");
+    localStorage.setItem(CURRENT_USER_KEY, user.username);
+    $("#loginForm").reset();
+    applyAuthedState();
+  });
+
+  $("#signupForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearAuthErr("signupErr");
+    const fullName = $("#signupName").value.trim();
+    const username = $("#signupUser").value.trim().toLowerCase();
+    const email = $("#signupEmail").value.trim();
+    const phone = $("#signupPhone").value.trim();
+    const unit = $("#signupUnit").value;
+    const password = $("#signupPass").value;
+
+    if (!fullName || fullName.split(/\s+/).length < 2) return showAuthErr("signupErr", "Please enter your real full name (first and last).");
+    if (/^(test|anon|asdf|none|foo|bar|n\/a|xxx)$/i.test(fullName.split(/\s+/)[0])) return showAuthErr("signupErr", "Please use your real full name — training records use this name.");
+    if (!/^[a-z0-9._-]{3,}$/i.test(username)) return showAuthErr("signupErr", "Username must be 3+ characters (letters, numbers, . _ -).");
+    if (!validEmail(email)) return showAuthErr("signupErr", "That email doesn't look right.");
+    if (!validPhone(phone)) return showAuthErr("signupErr", "That phone number looks invalid.");
+    if (!unit) return showAuthErr("signupErr", "Choose your unit.");
+    if (password.length < 6) return showAuthErr("signupErr", "Password must be at least 6 characters.");
+
+    const users = loadUsers();
+    if (users.some(u => u.username === username)) return showAuthErr("signupErr", "That username is taken — try another.");
+    if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) return showAuthErr("signupErr", "An account already exists with that email.");
+
+    const salt = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random());
+    const passwordHash = await hash(password + "::" + salt);
+    users.push({ username, fullName, email, phone, unit, salt, passwordHash, createdAt: new Date().toISOString() });
+    saveUsers(users);
+    localStorage.setItem(CURRENT_USER_KEY, username);
+    $("#signupForm").reset();
+    applyAuthedState();
+  });
+
+  $("#logoutBtn").addEventListener("click", () => {
+    localStorage.removeItem(CURRENT_USER_KEY);
+    sessionStorage.removeItem("gpl.vpmo.trainerAuth");
+    document.body.classList.remove("view-trainer");
+    document.body.classList.add("view-trainee");
+    applyAuthedState();
+  });
+
+  /* ----- Trainer password gate ----- */
+  const TRAINER_PASSWORD = "vpmo2026"; // change here to rotate
+  const AUTH_KEY = "gpl.vpmo.trainerAuth";
+  const isUnlocked = () => sessionStorage.getItem(AUTH_KEY) === "1";
+
+  function applyView(v) {
+    document.body.classList.toggle("view-trainee", v === "trainee");
+    document.body.classList.toggle("view-trainer", v === "trainer");
+    document.querySelectorAll("[data-view-btn]").forEach(b => b.classList.toggle("active", b.dataset.viewBtn === v));
+    localStorage.setItem("gpl.vpmo.view", v);
+    renderAll();
+  }
+
+  function openLock(onSuccess) {
+    $("#lockBackdrop").classList.add("open");
+    $("#lockErr").textContent = "";
+    const input = $("#lockInput");
+    input.value = "";
+    setTimeout(() => input.focus(), 50);
+
+    const submit = () => {
+      if (input.value === TRAINER_PASSWORD) {
+        sessionStorage.setItem(AUTH_KEY, "1");
+        $("#lockBackdrop").classList.remove("open");
+        onSuccess();
+      } else {
+        $("#lockErr").textContent = "Incorrect password.";
+        input.value = "";
+        input.focus();
+      }
+    };
+    $("#lockSubmit").onclick = submit;
+    input.onkeydown = (e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") closeLock(); };
+    $("#lockCancel").onclick = () => closeLock();
+  }
+  function closeLock() {
+    $("#lockBackdrop").classList.remove("open");
+    applyView("trainee");
+  }
+  $("#lockBackdrop").addEventListener("click", (e) => { if (e.target.id === "lockBackdrop") closeLock(); });
+
+  /* ----- View switching ----- */
+  function setView(v) {
+    if (v === "trainer" && !isUnlocked()) {
+      openLock(() => applyView("trainer"));
+      return;
+    }
+    applyView(v);
+  }
+  document.querySelectorAll("[data-view-btn]").forEach(b => b.addEventListener("click", () => setView(b.dataset.viewBtn)));
+
+  // On load: never auto-enter trainer view without a fresh unlock
+  const savedView = localStorage.getItem("gpl.vpmo.view") || "trainee";
+  applyView(savedView === "trainer" && !isUnlocked() ? "trainee" : savedView);
+
+  // Apply auth state on boot (shows login screen if no current user)
+  applyAuthedState();
+
+  $("#email")?.addEventListener("input", () => {
+    localStorage.setItem("gpl.vpmo.lastEmail", $("#email").value.trim().toLowerCase());
+    renderMyBookings();
+  });
+
+  /* ----- Unit head team UI ----- */
+  function renderPendingTeam() {
+    const wrap = $("#teamList");
+    $("#teamCount").textContent = `${pendingTeam.length} ${pendingTeam.length === 1 ? "person" : "people"}`;
+    if (pendingTeam.length === 0) {
+      wrap.innerHTML = `<div class="empty" style="padding:14px; font-size:12px;">No team members added yet.</div>`;
+      return;
+    }
+    wrap.innerHTML = pendingTeam.map((name, i) => `
+      <div class="material-item fade-in" style="margin-bottom:6px;">
+        <div class="file-icon" style="background:var(--brand-soft); color:var(--brand); font-weight:700; font-size:11px;">${escape(initials(name))}</div>
+        <div class="fname">${escape(name)}</div>
+        <button type="button" class="fdelete" data-team-i="${i}" title="Remove">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    `).join("");
+    wrap.querySelectorAll("[data-team-i]").forEach(b => b.addEventListener("click", () => {
+      pendingTeam.splice(Number(b.dataset.teamI), 1);
+      renderPendingTeam();
+    }));
+  }
+
+  $("#role").addEventListener("change", (e) => {
+    const isHead = e.target.value === "UnitHead";
+    $("#memberBlock").style.display = isHead ? "none" : "";
+    $("#unitHeadBlock").style.display = isHead ? "" : "none";
+    if (isHead) renderPendingTeam();
+  });
+
+  $("#addMemberBtn").addEventListener("click", () => {
+    const input = $("#newMemberName");
+    const name = input.value.trim();
+    if (!name) return;
+    if (pendingTeam.some(n => n.toLowerCase() === name.toLowerCase())) {
+      return showMsg(`${name} is already on the list.`, "err");
+    }
+    pendingTeam.push(name);
+    input.value = "";
+    input.focus();
+    renderPendingTeam();
+  });
+  $("#newMemberName").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); $("#addMemberBtn").click(); }
+  });
+
+  /* ----- Form submit ----- */
+  $("#regForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.target).entries());
+    data.fullName = data.fullName.trim();
+    data.email = data.email.trim();
+    data.phone = data.phone.trim();
+    data.unit = data.unit.trim();
+    data.notes = (data.notes || "").trim();
+
+    if (!data.fullName || !data.email || !data.phone || !data.unit || !data.date || !data.time || !data.level) {
+      return showMsg("Please fill every required field.", "err");
+    }
+    if (!validEmail(data.email)) return showMsg("That email doesn't look right.", "err");
+    if (!validPhone(data.phone)) return showMsg("GPL phone number looks invalid.", "err");
+
+    const list = load();
+    const dup = list.find(b => b.email.toLowerCase() === data.email.toLowerCase() && b.date === data.date);
+    if (dup) return showMsg("That email already has a booking on this date.", "err");
+    const conflict = list.find(b => slotsOverlap(b, data));
+    if (conflict) return showMsg(`Time conflicts with ${conflict.fullName} at ${conflict.time}.`, "err");
+
+    data.id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random());
+    data.createdAt = new Date().toISOString();
+    data.studyNotes = [];
+    data.materials = [];
+
+    if (data.role === "UnitHead") {
+      if (pendingTeam.length === 0) return showMsg("Add at least one team member you're sending.", "err");
+      data.teamMembers = pendingTeam.map(name => ({
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()),
+        name
+      }));
+      data.attendees = pendingTeam.length;
+    } else {
+      data.teamMembers = [];
+    }
+
+    list.push(data); save(list);
+    pendingTeam = [];
+
+    const d = new Date(data.date + "T00:00:00");
+    viewYear = d.getFullYear(); viewMonth = d.getMonth();
+    selectedDate = data.date;
+
+    e.target.reset();
+    $("#date").value = toISO(new Date());
+    $("#time").value = "10:00";
+    $("#attendees").value = 1;
+    $("#memberBlock").style.display = "";
+    $("#unitHeadBlock").style.display = "none";
+    renderPendingTeam();
+    showMsg(`Booked ${data.level} on ${data.date} at ${data.time}. Click the row to attach notes or materials.`, "ok");
+    renderAll();
+    setTimeout(() => openDrawer(data.id), 200);
+  });
+
+  $("#filter").addEventListener("input", renderTable);
+  $("#levelFilter").addEventListener("change", renderTable);
+
+  $("#clearAll").addEventListener("click", () => {
+    if (!confirm("Remove ALL bookings, notes, and materials?")) return;
+    save([]); renderAll();
+  });
+
+  $("#exportBtn").addEventListener("click", () => {
+    const list = load();
+    if (list.length === 0) return showMsg("Nothing to export yet.", "err");
+    const cols = ["date","time","duration","level","fullName","email","phone","unit","attendees","format","notes","createdAt"];
+    const esc = (v) => `"${String(v ?? "").replace(/"/g,'""')}"`;
+    const csv = [cols.join(","), ...list.map(r => cols.map(c => esc(r[c])).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `gpl-vpmo-bookings-${toISO(new Date())}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  renderAll();
+</script>
+</body>
+</html>

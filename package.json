@@ -1,0 +1,13 @@
+{
+  "name": "gpl-vpmo-training",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GPL VPMO onboarding & training scheduler",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
