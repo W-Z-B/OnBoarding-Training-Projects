@@ -2161,9 +2161,15 @@
     $("#time").value = "10:00";
   })();
   $("#date").addEventListener("change", () => {
+    const todayISO = toISO(new Date());
     const min = earliestBookableISO();
     const val = $("#date").value;
     if (!val) return;
+    if (val < todayISO) {
+      $("#date").value = min;
+      showMsg("You can't book a session in the past.", "err");
+      return;
+    }
     if (val < min) {
       $("#date").value = min;
       showMsg(`Please select a date at least ${MIN_LEAD_DAYS} days in advance (weekdays only).`, "err");
@@ -2218,6 +2224,7 @@
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target).entries());
     if (!$("#confirmDevices").checked) return showMsg("Please confirm you will bring your work laptop and phone.", "err");
+    if (data.date && data.date < toISO(new Date())) return showMsg("You can't book a session in the past.", "err");
     if (data.date && data.date < earliestBookableISO()) return showMsg(`Please select a date at least ${MIN_LEAD_DAYS} days in advance.`, "err");
     if (data.date && isWeekendISO(data.date)) return showMsg("Training isn't scheduled on Saturdays or Sundays — please pick a weekday.", "err");
 
@@ -2454,6 +2461,11 @@
     ["postponeDate","postponeTime"].forEach(id => {
       $("#" + id)?.addEventListener("change", async () => {
         const dateEl = $("#postponeDate");
+        const todayISO = toISO(new Date());
+        if (dateEl.value && dateEl.value < todayISO) {
+          dateEl.value = todayISO;
+          showMsg("Postponed date can't be in the past.", "err");
+        }
         if (dateEl.value && isWeekendISO(dateEl.value)) {
           const nxt = nextWeekdayISO(dateEl.value);
           dateEl.value = nxt;

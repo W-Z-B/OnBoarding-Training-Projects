@@ -292,8 +292,13 @@ route("POST", /^\/api\/bookings$/, async (req, res) => {
   const dur = Number(b.duration);
   if (!(dur > 0 && dur <= 600)) return json(res, 400, { error: "Invalid duration." });
 
-  // Minimum lead time: booking date must be at least MIN_LEAD_DAYS days ahead.
-  // Trainer can bypass for rescheduling flexibility.
+  // Never allow bookings in the past — applies to everyone, trainer included.
+  {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const picked = new Date(b.date + "T00:00:00");
+    if (picked < today) return json(res, 400, { error: "You can't book a session in the past." });
+  }
+  // Minimum lead time (2 days) — trainer can bypass for short-notice scheduling.
   if (!isTrainerUser(user)) {
     const earliest = new Date(); earliest.setHours(0,0,0,0);
     earliest.setDate(earliest.getDate() + MIN_LEAD_DAYS);
@@ -367,6 +372,8 @@ route("PATCH", /^\/api\/bookings\/([^/]+)$/, async (req, res, [, id]) => {
   if (body.postponedTo !== undefined) {
     if (body.postponedTo) {
       const d = new Date(body.postponedTo + "T00:00:00");
+      const today = new Date(); today.setHours(0,0,0,0);
+      if (d < today) return json(res, 400, { error: "Postponed date can't be in the past." });
       const dow = d.getDay();
       if (dow === 0 || dow === 6) return json(res, 400, { error: "Postponed date must be a weekday." });
     }
