@@ -355,6 +355,10 @@ route("PATCH", /^\/api\/bookings\/([^/]+)$/, async (req, res, [, id]) => {
   const values = [];
   let i = 1;
   if (body.status && ["Scheduled","Completed","Cancelled","Postponed"].includes(body.status)) {
+    // Only the trainer may mark a booking Completed
+    if (body.status === "Completed" && !isTrainerUser(user)) {
+      return json(res, 403, { error: "Only the trainer can mark a booking as Completed." });
+    }
     updates.push(`status = $${i++}`); values.push(body.status);
     if (body.status === "Completed") updates.push(`completed_at = NOW()`);
     if (body.status === "Cancelled") updates.push(`cancelled_at = NOW()`);

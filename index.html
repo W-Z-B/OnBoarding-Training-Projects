@@ -2292,10 +2292,14 @@
 
       <div class="section-title" style="margin-top:0;">Status</div>
       <div class="status-picker" id="statusPicker" data-current="${user.status || 'Scheduled'}">
-        ${["Scheduled","Completed","Postponed","Cancelled"].map(s =>
+        ${(state.user && state.user.isTrainer
+            ? ["Scheduled","Completed","Postponed","Cancelled"]
+            : ["Scheduled","Postponed","Cancelled"]
+          ).map(s =>
           `<button type="button" data-status="${s}" class="${(user.status || 'Scheduled') === s ? 'active-' + s : ''}">${s}</button>`
         ).join("")}
       </div>
+      ${state.user && !state.user.isTrainer ? `<p class="help" style="margin-top:6px;">Only the trainer can mark a session as Completed.</p>` : ""}
       <div id="postponeRow" style="display:${user.status === 'Postponed' ? 'flex' : 'none'}; gap:8px; margin-top:10px; flex-direction:column;">
         <div style="display:flex; gap:8px;">
           <input type="date" id="postponeDate" min="${toISO(new Date())}" value="${user.postponedTo || ''}" style="flex:1;" />
