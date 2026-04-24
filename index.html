@@ -276,6 +276,13 @@
     min-width: 22px; text-align: center;
   }
   .cal-day.other .num { color: var(--muted); }
+  .cal-day.weekend { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+  .cal-day.weekend .num { color: var(--muted); }
+  .cal-day.weekend::after {
+    content: ""; position: absolute; top: 4px; right: 4px;
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--muted); opacity: .5;
+  }
   .cal-dots { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 6px; }
   .cal-dot { width: 6px; height: 6px; border-radius: 50%; }
   .cal-count { margin-top: auto; font-size: 10px; color: var(--muted); font-weight: 500; }
@@ -1271,6 +1278,11 @@
 
   /* ---------- helpers ---------- */
   function toISO(d) { const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,"0"); const da=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${da}`; }
+  function isWeekendISO(iso) { if (!iso) return false; const d = new Date(iso + "T00:00:00"); const dow = d.getDay(); return dow === 0 || dow === 6; }
+  function nextWeekdayISO(iso) { const d = new Date(iso + "T00:00:00"); while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1); return toISO(d); }
+  /* A postponed booking "lives" on its new date for calendar/day/chart views */
+  function effectiveDate(b) { return (b.status === "Postponed" && b.postponedTo) ? b.postponedTo : b.date; }
+  function effectiveTime(b) { return (b.status === "Postponed" && b.postponedTime) ? b.postponedTime : b.time; }
   function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
   function validEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
   function validPhone(s) { return /^[+\d][\d\s\-().]{5,}$/.test(s); }
@@ -1501,7 +1513,11 @@
     $("#calTitle").textContent = first.toLocaleString(undefined, { month: "long", year: "numeric" });
 
     const todayISO = toISO(new Date());
-    const byDate = state.bookings.reduce((m,b) => ((m[b.date]=m[b.date]||[]).push(b), m), {});
+    const byDate = state.bookings.reduce((m,b) => {
+      const d = effectiveDate(b);
+      (m[d] = m[d] || []).push(b);
+      return m;
+    }, {});
 
     const cells = [];
     for (let i=0; i<startDow; i++) {
@@ -1520,7 +1536,8 @@
       const list = byDate[iso] || [];
       const dots = [...new Set(list.map(b => levelInfo(b.level).n))].sort()
         .slice(0,5).map(n => `<span class="cal-dot" style="background:var(--l${n})"></span>`).join("");
-      const classes = ["cal-day", c.other ? "other" : "", iso===todayISO ? "today" : "", iso===state.selectedDate ? "selected" : ""].filter(Boolean).join(" ");
+      const weekend = c.date.getDay() === 0 || c.date.getDay() === 6;
+      const classes = ["cal-day", c.other ? "other" : "", iso===todayISO ? "today" : "", iso===state.selectedDate ? "selected" : "", weekend ? "weekend" : ""].filter(Boolean).join(" ");
       const count = list.length ? `<div class="cal-count">${list.length} slot${list.length>1?"s":""}</div>` : "";
       return `<div class="${classes}" data-iso="${iso}"><div class="num">${c.date.getDate()}</div><div class="cal-dots">${dots}</div>${count}</div>`;
     }).join("");
@@ -1537,7 +1554,7 @@
   function renderDay() {
     const d = new Date(state.selectedDate + "T00:00:00");
     $("#dayTitle").textContent = d.toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric" });
-    const list = state.bookings.filter(b => b.date === state.selectedDate).sort((a,b) => a.time.localeCompare(b.time));
+    const list = state.bookings.filter(b => effectiveDate(b) === state.selectedDate).sort((a,b) => effectiveTime(a).localeCompare(effectiveTime(b)));
     $("#dayCount").textContent = list.length ? `${list.length} booking${list.length>1?"s":""}` : "";
     if (list.length === 0) {
       $("#dayList").innerHTML = `<div class="empty">
@@ -1548,10 +1565,11 @@
     $("#dayList").innerHTML = list.map(b => {
       const lv = levelInfo(b.level);
       const st = b.status || "Scheduled";
+      const rescheduled = st === "Postponed" && b.postponedTo ? `<span class="chip" style="background:color-mix(in srgb, var(--warn) 15%, transparent); color:var(--warn);">Rescheduled from ${b.date}</span>` : "";
       return `<div class="slot fade-in is-${st}" data-id="${b.id}">
-        <div class="time">${b.time}<small>${b.duration}m</small></div>
+        <div class="time">${effectiveTime(b)}<small>${b.duration}m</small></div>
         <div>
-          <div class="who">${escapeHtml(b.fullName)} <span class="chip ${lv.cls}">L${lv.n}</span> <span class="chip status-${st}">${st}</span></div>
+          <div class="who">${escapeHtml(b.fullName)} <span class="chip ${lv.cls}">L${lv.n}</span> <span class="chip status-${st}">${st}</span> ${rescheduled}</div>
           <div class="meta">${escapeHtml(b.unit)} · ${escapeHtml(b.format)} · ${Number(b.attendees)||1} attendees</div>
         </div>
         <button class="btn ghost sm">Open</button>
@@ -1623,7 +1641,7 @@
   /* ---------- My Bookings (trainee) ---------- */
   function renderMyBookings() {
     const wrap = $("#myBookingsList"); if (!wrap) return;
-    const list = state.bookings.slice().sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
+    const list = state.bookings.slice().sort((a,b) => (effectiveDate(a)+effectiveTime(a)).localeCompare(effectiveDate(b)+effectiveTime(b)));
     if (list.length === 0) {
       wrap.innerHTML = `<div class="empty">
         <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
@@ -1633,13 +1651,17 @@
     wrap.innerHTML = list.map(b => {
       const lv = levelInfo(b.level);
       const st = b.status || "Scheduled";
-      const d = new Date(b.date + "T00:00:00");
+      const effDate = effectiveDate(b);
+      const effTime = effectiveTime(b);
+      const d = new Date(effDate + "T00:00:00");
       const mon = d.toLocaleString(undefined, { month: "short" });
+      const reschedLine = st === "Postponed" && b.postponedTo ? `<div style="color:var(--warn); font-size:11px; margin-top:2px;">↪ Rescheduled from ${b.date} ${b.time}</div>` : "";
       return `<div class="my-slot fade-in is-${st}" data-id="${b.id}">
         <div class="date-box"><div class="m">${mon}</div><div class="d">${d.getDate()}</div></div>
         <div>
           <div style="font-weight:600; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">${escapeHtml(b.level)} <span class="chip ${lv.cls}">L${lv.n}</span> <span class="chip status-${st}">${st}</span></div>
-          <div style="color:var(--muted); font-size:12px; margin-top:2px;">${b.time} · ${b.duration}m · ${escapeHtml(b.format)} · ${escapeHtml(b.unit)}</div>
+          <div style="color:var(--muted); font-size:12px; margin-top:2px;">${effTime} · ${b.duration}m · ${escapeHtml(b.format)} · ${escapeHtml(b.unit)}</div>
+          ${reschedLine}
         </div>
         <button class="btn ghost sm">Open</button>
       </div>`;
@@ -2044,7 +2066,7 @@
     });
     // Rebuild with access to booking dates
     state.bookings.forEach(b => {
-      const date = b.date;
+      const date = effectiveDate(b);
       if (!perDay[date]) return; // outside range
       const st = b.status || "Scheduled";
       const count = b.role === "UnitHead" ? Math.max((b.teamMembers||[]).length, 1) : Math.max(Number(b.attendees)||1, 1);
@@ -2129,7 +2151,9 @@
   const MIN_LEAD_DAYS = 2;
   function earliestBookableISO() {
     const d = new Date(); d.setDate(d.getDate() + MIN_LEAD_DAYS);
-    return toISO(d);
+    let iso = toISO(d);
+    if (isWeekendISO(iso)) iso = nextWeekdayISO(iso);
+    return iso;
   }
   (function initDateDefault() {
     const iso = earliestBookableISO();
@@ -2138,9 +2162,17 @@
   })();
   $("#date").addEventListener("change", () => {
     const min = earliestBookableISO();
-    if ($("#date").value && $("#date").value < min) {
+    const val = $("#date").value;
+    if (!val) return;
+    if (val < min) {
       $("#date").value = min;
-      showMsg(`Please select a date at least ${MIN_LEAD_DAYS} days in advance.`, "err");
+      showMsg(`Please select a date at least ${MIN_LEAD_DAYS} days in advance (weekdays only).`, "err");
+      return;
+    }
+    if (isWeekendISO(val)) {
+      const nxt = nextWeekdayISO(val);
+      $("#date").value = nxt;
+      showMsg(`Training isn't scheduled on weekends. Moved to ${nxt}.`, "err");
     }
   });
 
@@ -2187,6 +2219,7 @@
     const data = Object.fromEntries(new FormData(e.target).entries());
     if (!$("#confirmDevices").checked) return showMsg("Please confirm you will bring your work laptop and phone.", "err");
     if (data.date && data.date < earliestBookableISO()) return showMsg(`Please select a date at least ${MIN_LEAD_DAYS} days in advance.`, "err");
+    if (data.date && isWeekendISO(data.date)) return showMsg("Training isn't scheduled on Saturdays or Sundays — please pick a weekday.", "err");
 
     const payload = {
       level: data.level,
@@ -2263,9 +2296,12 @@
           `<button type="button" data-status="${s}" class="${(user.status || 'Scheduled') === s ? 'active-' + s : ''}">${s}</button>`
         ).join("")}
       </div>
-      <div id="postponeRow" style="display:${user.status === 'Postponed' ? 'flex' : 'none'}; gap:8px; margin-top:10px;">
-        <input type="date" id="postponeDate" value="${user.postponedTo || ''}" style="flex:1;" />
-        <input type="time" id="postponeTime" value="${user.postponedTime || user.time || ''}" style="flex:1;" />
+      <div id="postponeRow" style="display:${user.status === 'Postponed' ? 'flex' : 'none'}; gap:8px; margin-top:10px; flex-direction:column;">
+        <div style="display:flex; gap:8px;">
+          <input type="date" id="postponeDate" min="${toISO(new Date())}" value="${user.postponedTo || ''}" style="flex:1;" />
+          <input type="time" id="postponeTime" value="${user.postponedTime || user.time || ''}" style="flex:1;" />
+        </div>
+        <p class="help" style="margin-top:0;">Pick a weekday — the booking will move on the calendar immediately.</p>
       </div>
       ${user.completedAt ? `<p class="help" style="margin-top:8px;">Completed on ${new Date(user.completedAt).toLocaleString(undefined, { dateStyle:"medium", timeStyle:"short" })}</p>` : ""}
       ${user.cancelledAt ? `<p class="help" style="margin-top:8px;">Cancelled on ${new Date(user.cancelledAt).toLocaleDateString(undefined, { dateStyle:"medium" })}</p>` : ""}
@@ -2413,9 +2449,15 @@
     });
     ["postponeDate","postponeTime"].forEach(id => {
       $("#" + id)?.addEventListener("change", async () => {
+        const dateEl = $("#postponeDate");
+        if (dateEl.value && isWeekendISO(dateEl.value)) {
+          const nxt = nextWeekdayISO(dateEl.value);
+          dateEl.value = nxt;
+          showMsg(`Training isn't scheduled on weekends. Moved to ${nxt}.`, "err");
+        }
         try {
           await api("PATCH", `/api/bookings/${state.activeBookingId}`, {
-            postponedTo: $("#postponeDate").value,
+            postponedTo: dateEl.value,
             postponedTime: $("#postponeTime").value
           });
           await refreshBookings(); renderAll();

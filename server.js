@@ -300,6 +300,12 @@ route("POST", /^\/api\/bookings$/, async (req, res) => {
     const picked = new Date(b.date + "T00:00:00");
     if (picked < earliest) return json(res, 400, { error: `Please book at least ${MIN_LEAD_DAYS} days in advance.` });
   }
+  // No weekend training
+  {
+    const picked = new Date(b.date + "T00:00:00");
+    const dow = picked.getDay();
+    if (dow === 0 || dow === 6) return json(res, 400, { error: "Training isn't scheduled on weekends — please pick a weekday." });
+  }
   const role = b.role === "UnitHead" ? "UnitHead" : "Member";
   const teamMembers = role === "UnitHead" ? (Array.isArray(b.teamMembers) ? b.teamMembers : []) : [];
   const attendees = role === "UnitHead" ? teamMembers.length : Math.max(1, Number(b.attendees) || 1);
@@ -354,7 +360,14 @@ route("PATCH", /^\/api\/bookings\/([^/]+)$/, async (req, res, [, id]) => {
     if (body.status === "Cancelled") updates.push(`cancelled_at = NOW()`);
     if (body.status === "Scheduled") updates.push(`completed_at = NULL`, `cancelled_at = NULL`, `postponed_to = NULL`, `postponed_time = NULL`);
   }
-  if (body.postponedTo !== undefined) { updates.push(`postponed_to = $${i++}`); values.push(body.postponedTo || null); }
+  if (body.postponedTo !== undefined) {
+    if (body.postponedTo) {
+      const d = new Date(body.postponedTo + "T00:00:00");
+      const dow = d.getDay();
+      if (dow === 0 || dow === 6) return json(res, 400, { error: "Postponed date must be a weekday." });
+    }
+    updates.push(`postponed_to = $${i++}`); values.push(body.postponedTo || null);
+  }
   if (body.postponedTime !== undefined) { updates.push(`postponed_time = $${i++}`); values.push(body.postponedTime || null); }
   if (updates.length === 0) return json(res, 400, { error: "Nothing to update." });
 
